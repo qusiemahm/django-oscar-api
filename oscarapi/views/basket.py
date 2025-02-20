@@ -14,7 +14,7 @@ from oscarapi.basket import operations
 from oscarapi.utils.loading import get_api_classes, get_api_class
 from oscarapi.views.utils import BasketPermissionMixin
 from rest_framework.permissions import IsAuthenticated ,AllowAny
-from oscar.core.loading import get_model
+
 from server.apps.voucher.models import Voucher
 from django.core.exceptions import PermissionDenied
 
