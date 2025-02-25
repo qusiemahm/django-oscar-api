@@ -165,13 +165,15 @@ api_root = get_api_class("views.root", "api_root")
 )
 
 (
-    AddressListView,
-    AddressDetailView,
+    UserAddressListCreateView,
+    UserAddressDetailView,
+    SetDefaultAddressView,
 ) = get_api_classes(
     "views.address",
     [
-        "AddressListView",
-        "AddressDetailView",
+        "UserAddressListCreateView",
+        "UserAddressDetailView",
+        "SetDefaultAddressView",
     ],
 )
 
@@ -280,9 +282,10 @@ urlpatterns = [
         AttributeOptionGroupAdminList.as_view(),
         name="admin-attributeoptiongroup-list",
     ),
-    path("wishlist/", WishlistView.as_view(), name="wishlist"),
-    path('addresses/', AddressListView.as_view(), name='address-list'),
-    path('addresses/<int:pk>/', AddressDetailView.as_view(), name='address-detail'),
+
+    path('addresses/', UserAddressListCreateView.as_view(), name='address-list-create'),
+    path('addresses/<int:pk>/', UserAddressDetailView.as_view(), name='address-detail'),
+    path('addresses/<int:pk>/set-default/', SetDefaultAddressView.as_view(), name='set-default-address'),
 ]
 
 admin_urlpatterns = [
