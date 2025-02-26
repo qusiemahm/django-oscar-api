@@ -142,11 +142,8 @@ class BasketSerializer(serializers.HyperlinkedModelSerializer):
     )
     currency = serializers.CharField(required=False)
     voucher_discounts = VoucherDiscountSerializer(many=True, required=False)
-    branch = serializers.PrimaryKeyRelatedField(
-        queryset=Store.objects.all(),  # Replace `Store` with your actual model
-        required=False,
-        allow_null=True
-    )
+    branch = serializers.SerializerMethodField()  # Change to SerializerMethodField
+
     owner = serializers.HyperlinkedRelatedField(
         view_name="user-detail",
         required=False,
@@ -236,6 +233,19 @@ class BasketSerializer(serializers.HyperlinkedModelSerializer):
             }
         return None  # Return None if no vendor is associated
 
+
+    def get_branch(self, obj):
+        """
+        Custom method to retrieve branch information.
+        `obj` is the Basket instance being serialized.
+        """
+        branch = obj.branch  # Access the related branch
+        if branch:  # Ensure the branch exists
+            return {
+                "id": branch.id,
+                "name": branch.name,
+            }
+        return None  # Return None if no branch is associated
 class BasketLineSerializer(OscarHyperlinkedModelSerializer):
     """
     This serializer computes the prices of this line by using the basket

@@ -73,27 +73,29 @@ class BasketView(APIView):
         return Response(serializer.data)
 
     def delete(self, request, *args, **kwargs):
-        """
-        Delete all lines from the basket.
-        """
-        basket = operations.get_basket(request)
-        
-        # Check if the basket is frozen
-        if basket.status == basket.FROZEN:
-            return Response(
-                {"message":  _("Cannot delete lines from a frozen basket.")},
-                status=403  # Forbidden
-            )
-        basket.lines.all().delete()
-        basket._lines = None
-        basket.branch=None
-        
-        basket.save()
-        return Response(
-            {"message":  _("All lines have been successfully deleted from the basket.")},
-            status=204  # No Content
-        )
+        try:
+            basket = operations.get_basket(request)
 
+            if basket.status == basket.FROZEN:
+                return Response(
+                    {"message": _("Cannot delete lines from a frozen basket.")},
+                    status=403  # Forbidden
+                )
+
+            basket.lines.all().delete()
+            basket._lines = None
+            basket.branch = None
+            basket.save()
+
+            return Response(
+                {"message": _("All lines have been successfully deleted from the basket.")},
+                status=204  # No Content
+            )
+        except Exception as e:
+            return Response(
+                {"message": _("An error occurred while deleting basket lines.")},
+                status=500  # Internal Server Error
+            )
 
 class AddProductView(APIView):
     """
