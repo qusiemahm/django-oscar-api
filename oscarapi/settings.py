@@ -109,6 +109,7 @@ SURCHARGE_FIELDS = overridable(
 ORDER_FIELDS = overridable(
     "OSCARAPI_ORDER_FIELDS",
     default=(
+        "id",
         "number",
         "basket",
         "url",
@@ -132,7 +133,7 @@ ORDER_FIELDS = overridable(
         "surcharges",
     ),
 )
-INITIAL_ORDER_STATUS = overridable("OSCARAPI_INITIAL_ORDER_STATUS", default="new")
+INITIAL_ORDER_STATUS = overridable("OSCARAPI_INITIAL_ORDER_STATUS", default="Pending")
 USERADDRESS_FIELDS = overridable(
     "OSCARAPI_USERADDRESS_FIELDS",
     default=(

@@ -22,6 +22,7 @@ from oscarapi.serializers.fields import (
     DrillDownHyperlinkedRelatedField,
     TaxIncludedDecimalField,
 )
+from server.apps.branch.serializers import StoreListSerializer
 
 
 OrderPlacementMixin = get_class("checkout.mixins", "OrderPlacementMixin")
@@ -201,6 +202,8 @@ class OrderSerializer(OscarHyperlinkedModelSerializer):
     voucher_discounts = serializers.SerializerMethodField()
     surcharges = InlineSurchargeSerializer(many=True, required=False)
 
+    store = StoreListSerializer(read_only=True)
+
     def get_offer_discounts(self, obj):
         qs = obj.basket_discounts.filter(
             offer_id__isnull=False, voucher_id__isnull=True
@@ -225,7 +228,7 @@ class OrderSerializer(OscarHyperlinkedModelSerializer):
 
     class Meta:
         model = Order
-        fields = settings.ORDER_FIELDS
+        fields = settings.ORDER_FIELDS + ("store",)
 
 
 class CheckoutSerializer(serializers.Serializer, OrderPlacementMixin):
@@ -255,14 +258,14 @@ class CheckoutSerializer(serializers.Serializer, OrderPlacementMixin):
                 message = _("Anonymous checkout forbidden")
                 raise serializers.ValidationError(message)
 
-            if not attrs.get("guest_email"):
-                # Always require the guest email field if the user is anonymous
-                message = _("Guest email is required for anonymous checkouts")
-                raise serializers.ValidationError(message)
-        else:
-            if "guest_email" in attrs:
-                # Don't store guest_email field if the user is authenticated
-                del attrs["guest_email"]
+            # if not attrs.get("guest_email"):
+            #     # Always require the guest email field if the user is anonymous
+            #     message = _("Guest email is required for anonymous checkouts")
+            #     raise serializers.ValidationError(message)
+        # else:
+        #     if "guest_email" in attrs:
+        #         # Don't store guest_email field if the user is authenticated
+        #         del attrs["guest_email"]
 
         basket = attrs.get("basket")
         basket = assign_basket_strategy(basket, request)
