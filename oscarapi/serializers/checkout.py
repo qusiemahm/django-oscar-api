@@ -202,7 +202,14 @@ class OrderSerializer(OscarHyperlinkedModelSerializer):
     voucher_discounts = serializers.SerializerMethodField()
     surcharges = InlineSurchargeSerializer(many=True, required=False)
 
-    store = StoreListSerializer(read_only=True)
+    branch = serializers.SerializerMethodField()
+
+    def get_branch(self, obj):
+        """Fetch store details and return them as 'branch'"""
+        if obj.store:
+            return StoreListSerializer(obj.store).data
+        return None
+
 
     def get_offer_discounts(self, obj):
         qs = obj.basket_discounts.filter(
@@ -228,7 +235,7 @@ class OrderSerializer(OscarHyperlinkedModelSerializer):
 
     class Meta:
         model = Order
-        fields = settings.ORDER_FIELDS + ("store",)
+        fields = settings.ORDER_FIELDS + ("branch",)
 
 
 class CheckoutSerializer(serializers.Serializer, OrderPlacementMixin):
