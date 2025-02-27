@@ -576,6 +576,8 @@ class ProductSerializer(PublicProductSerializer):
             Retrieve the stock record for the product based on the branch_id.
             """
             branch_id = self.context["request"].query_params.get("branch_id")
+            print(branch_id)
+            print(333333)
             if not branch_id:
                 basket = operations.get_basket( self.context["request"])
                 branch_id = basket.branch
@@ -584,6 +586,7 @@ class ProductSerializer(PublicProductSerializer):
                 return ProductStockRecordSerializer(stockrecord).data
             except StockRecord.DoesNotExist:
                 return {}
+            
     class Meta(PublicProductSerializer.Meta):
         fields = settings.PRODUCTDETAIL_FIELDS
 

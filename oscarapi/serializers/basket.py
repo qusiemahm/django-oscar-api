@@ -224,8 +224,7 @@ class BasketSerializer(serializers.HyperlinkedModelSerializer):
         `obj` is the Basket instance being serialized.
         """
         branch = obj.branch  # Access the related branch
-        print(branch)
-        print(33333)
+ 
         if branch and branch.vendor:  # Ensure the branch and vendor exist
             return {
                 "id": branch.vendor.id,
