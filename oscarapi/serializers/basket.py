@@ -143,6 +143,7 @@ class BasketSerializer(serializers.HyperlinkedModelSerializer):
     currency = serializers.CharField(required=False)
     voucher_discounts = VoucherDiscountSerializer(many=True, required=False)
     branch = serializers.SerializerMethodField()  # Change to SerializerMethodField
+    minimum_order_value = serializers.SerializerMethodField(  read_only=True,)
 
     owner = serializers.HyperlinkedRelatedField(
         view_name="user-detail",
@@ -156,7 +157,7 @@ class BasketSerializer(serializers.HyperlinkedModelSerializer):
 
     class Meta:
         model = Basket
-        fields = settings.BASKET_FIELDS  # Include the new field
+        fields = settings.BASKET_FIELDS
 
     def get_products_in_basket(self, obj):
         """
@@ -247,6 +248,12 @@ class BasketSerializer(serializers.HyperlinkedModelSerializer):
                 "longitude": branch.location.x,
             }
         return None  # Return None if no branch is associated
+
+    def get_minimum_order_value(self, obj):
+        branch = obj.branch
+        
+        return Decimal(str(branch.minimum_order_value)) if branch else Decimal('0.00')
+
 class BasketLineSerializer(OscarHyperlinkedModelSerializer):
     """
     This serializer computes the prices of this line by using the basket
