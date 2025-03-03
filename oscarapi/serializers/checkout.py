@@ -23,6 +23,7 @@ from oscarapi.serializers.fields import (
     TaxIncludedDecimalField,
 )
 from server.apps.branch.serializers import StoreListSerializer
+from oscar.apps.partner.strategy import Selector
 
 
 OrderPlacementMixin = get_class("checkout.mixins", "OrderPlacementMixin")
@@ -395,3 +396,129 @@ class UserAddressSerializer(OscarModelSerializer):
     class Meta:
         model = UserAddress
         fields = settings.USERADDRESS_FIELDS
+
+class OrderNotificationLineSerializer(serializers.ModelSerializer):
+    product_name = serializers.CharField(source="product.title")
+    quantity = serializers.IntegerField()
+    price_excl_tax = serializers.SerializerMethodField()
+    price_incl_tax = serializers.SerializerMethodField()
+
+    def get_price_excl_tax(self, obj):
+        return float(obj.line_price_excl_tax)  # Convert Decimal to float
+
+    def get_price_incl_tax(self, obj):
+        return float(obj.line_price_incl_tax)  # Convert Decimal to float
+
+    class Meta:
+        model = OrderLine
+        fields = ["product_name", "quantity", "price_excl_tax", "price_incl_tax"]
+
+class OrderNotificationSerializer(serializers.ModelSerializer):
+    """Serializer for WebSocket order notifications (for Celery)"""
+    order_number = serializers.CharField(source="number")
+    total_excl_tax = serializers.SerializerMethodField()
+    total_incl_tax = serializers.SerializerMethodField()
+    status = serializers.CharField()
+    email = serializers.EmailField()
+    date_placed = serializers.DateTimeField()
+    lines = OrderNotificationLineSerializer(many=True, source="lines.all")
+    branch = serializers.SerializerMethodField()
+    basket = serializers.SerializerMethodField()
+
+    def get_total_excl_tax(self, obj):
+        return float(obj.total_excl_tax)
+
+    def get_total_incl_tax(self, obj):
+        return float(obj.total_incl_tax)
+    
+    def get_basket(self, obj):
+        if obj.basket:
+            basket = obj.basket
+            basket.strategy = Selector().strategy()
+            return self._serialize_basket(basket)
+        return None
+    
+    def _serialize_basket(self, basket):
+        return {
+            "id": basket.id,
+            "total_excl_tax": float(basket.total_excl_tax),  # Convert
+            "total_excl_tax_excl_discounts": float(basket.total_excl_tax_excl_discounts),
+            "total_incl_tax": float(basket.total_incl_tax),
+            "total_incl_tax_excl_discounts": float(basket.total_incl_tax_excl_discounts),
+            "total_tax": float(basket.total_tax),  # Convert
+            "currency": basket.currency,
+            "vendor": self._get_vendor(basket),
+            "branch": self._get_branch(basket),
+            "products_in_basket": self._get_products_in_basket(basket),
+        }
+
+
+    def _get_vendor(self, basket):
+        """Get vendor details"""
+        if basket.branch and basket.branch.vendor:
+            return {
+                "id": basket.branch.vendor.id,
+                "name": basket.branch.vendor.name,
+            }
+        return None
+    
+    def _get_branch(self, basket):
+        """Get branch details"""
+        if basket.branch:
+            return {
+                "id": basket.branch.id,
+                "name": basket.branch.name,
+                "latitude": basket.branch.location.y,
+                "longitude": basket.branch.location.x,
+            }
+        return None
+    
+    def _get_products_in_basket(self, basket):
+        products_data = {}
+        for line in basket.lines.all():
+            line_data = {
+                "qty": line.quantity,
+                "line_id": line.id,
+                "attributes": self._get_attributes(line),
+                "title": line.product.title,
+                "original_price": float(line.product.original_price),  # Convert
+                "price_currency": line.product.price_currency,
+                "selling_price": float(line.product.selling_price),  # Convert
+                "image": self._get_product_images(line.product),
+            }
+            products_data[str(line.product.id)] = [line_data]
+        return products_data
+
+    def _get_product_images(self, product):
+        """Get product images"""
+        images = [image.original.url for image in product.get_all_images()]
+        return images[0] if images else ""
+
+    def _get_attributes(self, line):
+        """Get line attributes"""
+        return [{"value": attr.value, "name": attr.option.name} for attr in line.attributes.all()]
+    
+
+    def get_branch(self, obj):
+        """Fetch store details and return them as 'branch'"""
+        if obj.store:
+            return StoreListSerializer(obj.store).data
+        return None
+
+    
+
+    class Meta:
+        model = Order
+        fields = [
+            "id",
+            "order_number",
+            "total_excl_tax",
+            "total_incl_tax",
+            "status",
+            "email",
+            "date_placed",
+            "currency",
+            "lines",
+            "branch",
+            "basket"
+        ]
