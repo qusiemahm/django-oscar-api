@@ -522,3 +522,25 @@ class OrderNotificationSerializer(serializers.ModelSerializer):
             "branch",
             "basket"
         ]
+
+
+
+class OrderRatingPopupSerializer(serializers.ModelSerializer):
+    store_name = serializers.CharField(source='store.name', read_only=True)
+    vendor_name = serializers.CharField(source='store.vendor.name', read_only=True)
+    vendor_banner = serializers.ImageField(source='store.vendor.banner', read_only=True)
+    vendor_logo = serializers.ImageField(source='store.vendor.business_details.logo', read_only=True)
+    
+    class Meta:
+        model = Order
+        fields = [
+            'id', 
+            'number', 
+            'show_rating_popup', 
+            'store', 
+            'store_name',
+            'vendor_name',
+            'vendor_banner',
+            'vendor_logo'
+        ]
+        read_only_fields = ['id', 'number', 'store', 'store_name', 'vendor_name', 'vendor_banner', 'vendor_logo']

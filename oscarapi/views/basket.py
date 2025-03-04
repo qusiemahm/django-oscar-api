@@ -82,15 +82,17 @@ class BasketView(APIView):
                     status=403  # Forbidden
                 )
 
+            # Delete all lines and clean up
             basket.lines.all().delete()
             basket._lines = None
             basket.branch = None
+            basket.vouchers.clear()  # Clear any vouchers
             basket.save()
 
-            return Response(
-                {"message": _("All lines have been successfully deleted from the basket.")},
-                status=204  # No Content
-            )
+            # Return empty basket data instead of just a message
+            serializer = self.serializer_class(basket, context={"request": request})
+            return Response(serializer.data, status=200)  # Changed to 200 to return data
+
         except Exception as e:
             return Response(
                 {"message": _("An error occurred while deleting basket lines.")},
@@ -489,9 +491,20 @@ class BasketLineDetail(generics.RetrieveUpdateDestroyAPIView):
             # Perform the deletion
             self.perform_destroy(instance)
             
-            if basket.is_empty:
+            # Check if basket has any lines left
+            if basket.lines.count() == 0:
                 basket.branch = None  # Set branch to null if the basket is empty
-                basket.save(update_fields=["branch"])  # Save only the branch field to avoid unnecessary updates
+                basket.vouchers.clear()  # Clear any vouchers
+                basket.save()
+            else:
+                # Recalculate basket totals and offers
+                operations.apply_offers(request, basket)
+                
+            # Refresh basket from database to get updated state
+            basket = operations.get_basket(request)
+            basket.strategy = request.strategy
+            
+            # Serialize the updated basket
             basket_serializer = BasketSerializer(basket, context={"request": request})
 
             # Return the serialized basket object

@@ -163,6 +163,14 @@ api_root = get_api_class("views.root", "api_root")
         "BasketAdminDetail",
     ],
 )
+(
+    LastOrderRatingPopupView,
+) = get_api_classes(
+    "views.checkout",
+    [
+        "LastOrderRatingPopupView",
+    ],
+)
 
 (
     UserAddressListCreateView,
@@ -202,6 +210,10 @@ urlpatterns = [
         ShippingMethodView.as_view(),
         name="api-basket-shipping-methods",
     ),
+        # ... other URL patterns ...
+    path('orders/rating-popup/', 
+         LastOrderRatingPopupView.as_view(), 
+         name='last-order-rating-popup'),
     path("baskets/", BasketList.as_view(), name="basket-list"),
     path("baskets/<int:pk>/", BasketDetail.as_view(), name="basket-detail"),
     path("baskets/<int:pk>/lines/", LineList.as_view(), name="basket-lines-list"),

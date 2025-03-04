@@ -8,17 +8,26 @@ from oscarapi.permissions import IsOwner
 from oscarapi.utils.loading import get_api_classes
 from oscarapi.signals import oscarapi_post_checkout
 from oscarapi.views.utils import parse_basket_from_hyperlink
+from rest_framework.permissions import IsAuthenticated
+from django.db import transaction
+from django.utils import timezone
+from datetime import timedelta
+
 
 Order = get_model("order", "Order")
 OrderLine = get_model("order", "Line")
 OrderLineAttribute = get_model("order", "LineAttribute")
 UserAddress = get_model("address", "UserAddress")
+Order = get_model('order', 'Order')
+
+
 (
     CheckoutSerializer,
     OrderLineAttributeSerializer,
     OrderLineSerializer,
     OrderSerializer,
     UserAddressSerializer,
+    OrderRatingPopupSerializer,
 ) = get_api_classes(
     "serializers.checkout",
     [
@@ -27,6 +36,7 @@ UserAddress = get_model("address", "UserAddress")
         "OrderLineSerializer",
         "OrderSerializer",
         "UserAddressSerializer",
+        "OrderRatingPopupSerializer",
     ],
 )
 
@@ -175,3 +185,34 @@ class UserAddressDetail(generics.RetrieveUpdateDestroyAPIView):
 
     def get_queryset(self):
         return UserAddress.objects.filter(user=self.request.user)
+
+class LastOrderRatingPopupView(generics.RetrieveAPIView):
+    serializer_class = OrderRatingPopupSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_object(self):
+        # Define the time window (1 hours)
+        time_window = timedelta(hours=1)
+        now = timezone.now()
+
+        # Retrieve the most recent order for the user
+        order = Order.objects.filter(
+            user=self.request.user
+        ).order_by('-date_placed').first()
+
+        if not order:
+            return None  # Or raise a 404 error if no orders exist
+
+        # Check if the order is within the 1-hour window and the popup flag is True
+        print(now - order.date_placed)
+        print( (now - order.date_placed) >= time_window)
+        if order.show_rating_popup and (now - order.date_placed) >= time_window:
+            # Keep the original state for the response
+            response_order = Order.objects.get(pk=order.pk)
+            # Update the flag for future requests
+            with transaction.atomic():
+                order.show_rating_popup = False
+                order.save(update_fields=['show_rating_popup'])
+            return response_order
+
+        return None  # No popup should be shown
