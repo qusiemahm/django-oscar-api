@@ -191,21 +191,20 @@ class LastOrderRatingPopupView(generics.RetrieveAPIView):
     permission_classes = [IsAuthenticated]
 
     def get_object(self):
-        # Define the time window (1 hours)
+        # Define the time window (1 hour)
         time_window = timedelta(hours=1)
         now = timezone.now()
 
-        # Retrieve the most recent order for the user
+        # Retrieve the most recent order for the user with status "Finished"
         order = Order.objects.filter(
-            user=self.request.user
+            user=self.request.user,
+            status='Finished'  # Filter by status "Finished"
         ).order_by('-date_placed').first()
 
         if not order:
             return None  # Or raise a 404 error if no orders exist
 
         # Check if the order is within the 1-hour window and the popup flag is True
-        print(now - order.date_placed)
-        print( (now - order.date_placed) >= time_window)
         if order.show_rating_popup and (now - order.date_placed) >= time_window:
             # Keep the original state for the response
             response_order = Order.objects.get(pk=order.pk)
@@ -215,4 +214,4 @@ class LastOrderRatingPopupView(generics.RetrieveAPIView):
                 order.save(update_fields=['show_rating_popup'])
             return response_order
 
-        return None  # No popup should be shown
+        return None  # No popup
