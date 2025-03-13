@@ -544,3 +544,154 @@ class OrderRatingPopupSerializer(serializers.ModelSerializer):
             'vendor_logo'
         ]
         read_only_fields = ['id', 'number', 'store', 'store_name', 'vendor_name', 'vendor_banner', 'vendor_logo']
+
+
+# Create a custom serializer that includes detailed basket and product information
+class DetailedOrderSerializer(OrderSerializer):
+    """
+    Extended OrderSerializer that includes detailed basket and product information
+    instead of just URLs.
+    """
+    
+    class Meta(OrderSerializer.Meta):
+        model = Order
+        fields = OrderSerializer.Meta.fields
+    
+    def to_representation(self, instance):
+        # Get the standard representation
+        representation = super().to_representation(instance)
+        
+        # Add detailed lines information instead of just URL
+        order_lines = instance.lines.all()
+        representation['lines'] = OrderLineSerializer(
+            order_lines, 
+            many=True, 
+            context=self.context
+        ).data
+        
+        # Add basket details if available
+        if instance.basket:
+            basket = instance.basket
+            # Ensure the basket has a strategy for price calculations
+            basket.strategy = Selector().strategy()
+            
+            representation['basket'] = {
+                "id": basket.id,
+                "total_excl_tax": float(basket.total_excl_tax),
+                "total_excl_tax_excl_discounts": float(basket.total_excl_tax_excl_discounts),
+                "total_incl_tax": float(basket.total_incl_tax),
+                "total_incl_tax_excl_discounts": float(basket.total_incl_tax_excl_discounts),
+                "total_tax": float(basket.total_tax),
+                "currency": basket.currency,
+                "products": self._get_products_in_basket(basket),
+            }
+        
+        return representation
+    
+    def _get_products_in_basket(self, basket):
+        """Get detailed product information from the basket"""
+        products_data = []
+        for line in basket.lines.all():
+            # Get product images
+            images = []
+            if hasattr(line.product, 'get_all_images'):
+                images = [image.original.url for image in line.product.get_all_images() if hasattr(image, 'original')]
+            
+            # Get line attributes
+            attributes = []
+            for attr in line.attributes.all():
+                attributes.append({
+                    "value": attr.value,
+                    "name": attr.option.name if hasattr(attr.option, 'name') else str(attr.option)
+                })
+            
+            line_data = {
+                "id": line.id,
+                "product_id": line.product.id,
+                "title": line.product.get_title(),
+                "quantity": line.quantity,
+                "attributes": attributes,
+                "price_excl_tax": float(line.line_price_excl_tax),
+                "price_incl_tax": float(line.line_price_incl_tax),
+                "price_currency": basket.currency,
+                "images": images[0] if images else None,
+            }
+            products_data.append(line_data)
+        
+        return products_data
+
+
+# Create a custom serializer that includes detailed basket and product information
+class DetailedOrderSerializer(OrderSerializer):
+    """
+    Extended OrderSerializer that includes detailed basket and product information
+    instead of just URLs.
+    """
+    
+    class Meta(OrderSerializer.Meta):
+        model = Order
+        fields = OrderSerializer.Meta.fields
+    
+    def to_representation(self, instance):
+        # Get the standard representation
+        representation = super().to_representation(instance)
+        
+        # Add detailed lines information instead of just URL
+        order_lines = instance.lines.all()
+        representation['lines'] = OrderLineSerializer(
+            order_lines, 
+            many=True, 
+            context=self.context
+        ).data
+        
+        # Add basket details if available
+        if instance.basket:
+            basket = instance.basket
+            # Ensure the basket has a strategy for price calculations
+            basket.strategy = Selector().strategy()
+            
+            representation['basket'] = {
+                "id": basket.id,
+                "total_excl_tax": float(basket.total_excl_tax),
+                "total_excl_tax_excl_discounts": float(basket.total_excl_tax_excl_discounts),
+                "total_incl_tax": float(basket.total_incl_tax),
+                "total_incl_tax_excl_discounts": float(basket.total_incl_tax_excl_discounts),
+                "total_tax": float(basket.total_tax),
+                "currency": basket.currency,
+                "products": self._get_products_in_basket(basket),
+            }
+        
+        return representation
+    
+    def _get_products_in_basket(self, basket):
+        """Get detailed product information from the basket"""
+        products_data = []
+        for line in basket.lines.all():
+            # Get product images
+            images = []
+            if hasattr(line.product, 'get_all_images'):
+                images = [image.original.url for image in line.product.get_all_images() if hasattr(image, 'original')]
+            
+            # Get line attributes
+            attributes = []
+            for attr in line.attributes.all():
+                attributes.append({
+                    "value": attr.value,
+                    "name": attr.option.name if hasattr(attr.option, 'name') else str(attr.option)
+                })
+            
+            line_data = {
+                "id": line.id,
+                "product_id": line.product.id,
+                "title": line.product.get_title(),
+                "quantity": line.quantity,
+                "attributes": attributes,
+                "price_excl_tax": float(line.line_price_excl_tax),
+                "price_incl_tax": float(line.line_price_incl_tax),
+                "price_currency": basket.currency,
+                "images": images[0] if images else None,
+            }
+            products_data.append(line_data)
+        
+        return products_data
+

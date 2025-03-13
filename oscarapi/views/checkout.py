@@ -12,6 +12,7 @@ from rest_framework.permissions import IsAuthenticated
 from django.db import transaction
 from django.utils import timezone
 from datetime import timedelta
+from oscar.apps.partner.strategy import Selector
 
 
 Order = get_model("order", "Order")
@@ -28,6 +29,7 @@ Order = get_model('order', 'Order')
     OrderSerializer,
     UserAddressSerializer,
     OrderRatingPopupSerializer,
+    DetailedOrderSerializer,
 ) = get_api_classes(
     "serializers.checkout",
     [
@@ -37,6 +39,7 @@ Order = get_model('order', 'Order')
         "OrderSerializer",
         "UserAddressSerializer",
         "OrderRatingPopupSerializer",
+        "DetailedOrderSerializer",
     ],
 )
 
@@ -52,8 +55,9 @@ __all__ = (
 )
 
 
+
 class OrderList(generics.ListAPIView):
-    serializer_class = OrderSerializer
+    serializer_class = DetailedOrderSerializer  # Use the detailed serializer
     permission_classes = (IsOwner,)
 
     def get_queryset(self):
@@ -63,7 +67,7 @@ class OrderList(generics.ListAPIView):
 
 class OrderDetail(generics.RetrieveAPIView):
     queryset = Order.objects.all()
-    serializer_class = OrderSerializer
+    serializer_class = DetailedOrderSerializer  # Also use the detailed serializer here
     permission_classes = (IsOwner,)
 
 
@@ -138,7 +142,7 @@ class CheckoutView(views.APIView):
     returns the order object.
     """
     permission_classes = (IsOwner,)
-    order_serializer_class = OrderSerializer
+    order_serializer_class = DetailedOrderSerializer  # Use the detailed serializer here too
     serializer_class = CheckoutSerializer
 
     # pylint: disable=W0622, W1113
