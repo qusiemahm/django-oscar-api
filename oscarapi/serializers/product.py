@@ -437,6 +437,19 @@ class ProductImageSerializer(OscarModelSerializer):
     product = serializers.PrimaryKeyRelatedField(
         write_only=True, required=False, queryset=Product.objects
     )
+    original = serializers.ImageField(required=False)
+    
+    def create(self, validated_data):
+        """
+        Handle image upload when creating a new product image.
+        """
+        return super().create(validated_data)
+    
+    def update(self, instance, validated_data):
+        """
+        Handle image upload when updating an existing product image.
+        """
+        return super().update(instance, validated_data)
 
     class Meta:
         model = ProductImage
