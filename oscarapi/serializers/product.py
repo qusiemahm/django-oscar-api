@@ -460,6 +460,7 @@ class RecommmendedProductSerializer(OscarModelSerializer):
 
 class ProductStockRecordSerializer(OscarModelSerializer):
     available_to_buy = serializers.SerializerMethodField()
+    in_stock = serializers.SerializerMethodField()
     
     def get_available_to_buy(self, obj):
         """
@@ -469,6 +470,12 @@ class ProductStockRecordSerializer(OscarModelSerializer):
             return max(0, obj.num_in_stock - obj.num_allocated)
         except:
             return
+    def get_in_stock(self, obj):
+        """
+        Check if the product is in stock.
+        """
+        return max(0, obj.num_in_stock - obj.num_allocated) > 0
+    
     class Meta:
         model = StockRecord
         fields = "__all__"
@@ -575,12 +582,19 @@ class ProductSerializer(PublicProductSerializer):
             """
             Retrieve the stock record for the product based on the branch_id.
             """
+            # Step 1: Try to get branch_id from the query (assuming it's passed in the request)
             branch_id = self.context["request"].query_params.get("branch_id")
-            # print(branch_id)
-            # print(333333)
+
+            # Step 2: If not from the query, try to get it from the basket
             if not branch_id:
-                basket = operations.get_basket( self.context["request"])
+                basket = operations.get_basket(self.context["request"])
                 branch_id = basket.branch
+
+            # Step 3: If still not available, fall back to the user's vendor staff branch ID
+            if not branch_id:
+                branch_id = self.context["request"].user.user_vendor_staff.branch.id
+
+            # Step 4: Attempt to fetch the stock record for the determined branch_id
             try:
                 stockrecord = obj.stockrecords.get(branch_id=branch_id)
                 return ProductStockRecordSerializer(stockrecord).data
