@@ -163,7 +163,7 @@ USER_FIELDS = overridable(
 )
 OPTION_FIELDS = overridable(
     "OSCARAPI_OPTION_FIELDS",
-    default=("url", "code", "name", "type", "required", "help_text", "order", "option_group")
+    default=("id", "url", "code", "name", "type", "required", "help_text", "order", "option_group")
 )
 PRODUCT_ATTRIBUTE_VALUE_FIELDS = overridable(
     "OSCARAPI_PRODUCT_ATTRIBUTE_VALUE_FIELDS",

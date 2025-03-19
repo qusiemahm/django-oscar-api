@@ -110,7 +110,7 @@ class AttributeOptionGroupSerializer(OscarHyperlinkedModelSerializer):
 
     class Meta:
         model = AttributeOptionGroup
-        fields = ("url", "name", "code", "options")
+        fields = ("id", "url", "name", "code", "options")
         
         depth = 1
 

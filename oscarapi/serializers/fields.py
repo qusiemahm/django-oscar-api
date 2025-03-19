@@ -196,6 +196,9 @@ class AttributeValueField(AttributeFieldBase, serializers.Field):
     def to_representation(self, value):
         obj_type = value.attribute.type
         if obj_type == value.attribute.OPTION:
+            # Handle case where value.value is None
+            if value.value is None:
+                return None
             return value.value.option
         elif obj_type == value.attribute.MULTI_OPTION:
             return value.value.values_list("option", flat=True)
