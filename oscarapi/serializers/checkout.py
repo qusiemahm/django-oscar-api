@@ -24,6 +24,7 @@ from oscarapi.serializers.fields import (
 )
 from server.apps.branch.serializers import StoreListSerializer
 from oscar.apps.partner.strategy import Selector
+from server.apps.vehicle.serializers import VehicleSerializer
 
 
 OrderPlacementMixin = get_class("checkout.mixins", "OrderPlacementMixin")
@@ -35,6 +36,7 @@ OrderLine = get_model("order", "Line")
 OrderLineAttribute = get_model("order", "LineAttribute")
 Surcharge = get_model("order", "Surcharge")
 StockRecord = get_model("partner", "StockRecord")
+Vehicle = get_model("vehicle", "Vehicle")
 
 Basket = get_model("basket", "Basket")
 Country = get_model("address", "Country")
@@ -250,6 +252,12 @@ class CheckoutSerializer(serializers.Serializer, OrderPlacementMixin):
     shipping_address = ShippingAddressSerializer(many=False, required=False)
     billing_address = BillingAddressSerializer(many=False, required=False)
 
+    vehicle = serializers.PrimaryKeyRelatedField(
+        queryset=Vehicle.objects.all(),  # You probably want to filter to only user’s vehicles
+        required=False,
+        allow_null=True
+    )
+
     @property
     def request(self):
         return self.context["request"]
@@ -307,6 +315,11 @@ class CheckoutSerializer(serializers.Serializer, OrderPlacementMixin):
                 message = _("Total incorrect %s != %s" % (posted_total, total.incl_tax))
                 raise serializers.ValidationError(message)
 
+        vehicle = attrs.get('vehicle')
+        if vehicle and vehicle.customer_id != request.user.id:
+            raise serializers.ValidationError("You cannot use a vehicle that does not belong to you.")
+
+
         # update attrs with validated data.
         attrs["order_total"] = total
         attrs["shipping_method"] = shipping_method
@@ -319,6 +332,8 @@ class CheckoutSerializer(serializers.Serializer, OrderPlacementMixin):
             basket = validated_data.get("basket")
             order_number = self.generate_order_number(basket)
             request = self.request
+            vehicle = validated_data.pop('vehicle', None)
+
 
             if "shipping_address" in validated_data:
                 shipping_address = ShippingAddress(**validated_data["shipping_address"])
@@ -340,6 +355,7 @@ class CheckoutSerializer(serializers.Serializer, OrderPlacementMixin):
                 billing_address=billing_address,
                 order_total=validated_data.get("order_total"),
                 guest_email=validated_data.get("guest_email") or "",
+                vehicle=vehicle,
             )
         except ValueError as e:
             raise exceptions.NotAcceptable(str(e))
@@ -552,10 +568,12 @@ class DetailedOrderSerializer(OrderSerializer):
     Extended OrderSerializer that includes detailed basket and product information
     instead of just URLs.
     """
+    vehicle = VehicleSerializer(read_only=True)
+
     
     class Meta(OrderSerializer.Meta):
         model = Order
-        fields = OrderSerializer.Meta.fields
+        fields = OrderSerializer.Meta.fields + ("vehicle",)
     
     def to_representation(self, instance):
         # Get the standard representation
@@ -621,77 +639,77 @@ class DetailedOrderSerializer(OrderSerializer):
         return products_data
 
 
-# Create a custom serializer that includes detailed basket and product information
-class DetailedOrderSerializer(OrderSerializer):
-    """
-    Extended OrderSerializer that includes detailed basket and product information
-    instead of just URLs.
-    """
+# # Create a custom serializer that includes detailed basket and product information
+# class DetailedOrderSerializer(OrderSerializer):
+#     """
+#     Extended OrderSerializer that includes detailed basket and product information
+#     instead of just URLs.
+#     """
     
-    class Meta(OrderSerializer.Meta):
-        model = Order
-        fields = OrderSerializer.Meta.fields
+#     class Meta(OrderSerializer.Meta):
+#         model = Order
+#         fields = OrderSerializer.Meta.fields
     
-    def to_representation(self, instance):
-        # Get the standard representation
-        representation = super().to_representation(instance)
+#     def to_representation(self, instance):
+#         # Get the standard representation
+#         representation = super().to_representation(instance)
         
-        # Add detailed lines information instead of just URL
-        order_lines = instance.lines.all()
-        representation['lines'] = OrderLineSerializer(
-            order_lines, 
-            many=True, 
-            context=self.context
-        ).data
+#         # Add detailed lines information instead of just URL
+#         order_lines = instance.lines.all()
+#         representation['lines'] = OrderLineSerializer(
+#             order_lines, 
+#             many=True, 
+#             context=self.context
+#         ).data
         
-        # Add basket details if available
-        if instance.basket:
-            basket = instance.basket
-            # Ensure the basket has a strategy for price calculations
-            basket.strategy = Selector().strategy()
+#         # Add basket details if available
+#         if instance.basket:
+#             basket = instance.basket
+#             # Ensure the basket has a strategy for price calculations
+#             basket.strategy = Selector().strategy()
             
-            representation['basket'] = {
-                "id": basket.id,
-                "total_excl_tax": float(basket.total_excl_tax),
-                "total_excl_tax_excl_discounts": float(basket.total_excl_tax_excl_discounts),
-                "total_incl_tax": float(basket.total_incl_tax),
-                "total_incl_tax_excl_discounts": float(basket.total_incl_tax_excl_discounts),
-                "total_tax": float(basket.total_tax),
-                "currency": basket.currency,
-                "products": self._get_products_in_basket(basket),
-            }
+#             representation['basket'] = {
+#                 "id": basket.id,
+#                 "total_excl_tax": float(basket.total_excl_tax),
+#                 "total_excl_tax_excl_discounts": float(basket.total_excl_tax_excl_discounts),
+#                 "total_incl_tax": float(basket.total_incl_tax),
+#                 "total_incl_tax_excl_discounts": float(basket.total_incl_tax_excl_discounts),
+#                 "total_tax": float(basket.total_tax),
+#                 "currency": basket.currency,
+#                 "products": self._get_products_in_basket(basket),
+#             }
         
-        return representation
+#         return representation
     
-    def _get_products_in_basket(self, basket):
-        """Get detailed product information from the basket"""
-        products_data = []
-        for line in basket.lines.all():
-            # Get product images
-            images = []
-            if hasattr(line.product, 'get_all_images'):
-                images = [image.original.url for image in line.product.get_all_images() if hasattr(image, 'original')]
+#     def _get_products_in_basket(self, basket):
+#         """Get detailed product information from the basket"""
+#         products_data = []
+#         for line in basket.lines.all():
+#             # Get product images
+#             images = []
+#             if hasattr(line.product, 'get_all_images'):
+#                 images = [image.original.url for image in line.product.get_all_images() if hasattr(image, 'original')]
             
-            # Get line attributes
-            attributes = []
-            for attr in line.attributes.all():
-                attributes.append({
-                    "value": attr.value,
-                    "name": attr.option.name if hasattr(attr.option, 'name') else str(attr.option)
-                })
+#             # Get line attributes
+#             attributes = []
+#             for attr in line.attributes.all():
+#                 attributes.append({
+#                     "value": attr.value,
+#                     "name": attr.option.name if hasattr(attr.option, 'name') else str(attr.option)
+#                 })
             
-            line_data = {
-                "id": line.id,
-                "product_id": line.product.id,
-                "title": line.product.get_title(),
-                "quantity": line.quantity,
-                "attributes": attributes,
-                "price_excl_tax": float(line.line_price_excl_tax),
-                "price_incl_tax": float(line.line_price_incl_tax),
-                "price_currency": basket.currency,
-                "images": images[0] if images else None,
-            }
-            products_data.append(line_data)
+#             line_data = {
+#                 "id": line.id,
+#                 "product_id": line.product.id,
+#                 "title": line.product.get_title(),
+#                 "quantity": line.quantity,
+#                 "attributes": attributes,
+#                 "price_excl_tax": float(line.line_price_excl_tax),
+#                 "price_incl_tax": float(line.line_price_incl_tax),
+#                 "price_currency": basket.currency,
+#                 "images": images[0] if images else None,
+#             }
+#             products_data.append(line_data)
         
-        return products_data
+#         return products_data
 
