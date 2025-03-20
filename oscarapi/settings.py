@@ -205,6 +205,7 @@ PRODUCTDETAIL_FIELDS = overridable(
     default=(
         "url",
         "upc",
+        "sku",
         "id",
         "title",
         "description",
@@ -225,6 +226,9 @@ PRODUCTDETAIL_FIELDS = overridable(
         "children",
         "services",
         "vendor",
+        "calories",
+        "preparation_time",
+        "allergens",
     ),
 )
 PRODUCT_FIELDS = overridable(
