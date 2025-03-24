@@ -61,8 +61,16 @@ class OrderList(generics.ListAPIView):
     permission_classes = (IsOwner,)
 
     def get_queryset(self):
-        qs = Order.objects.all()
-        return qs.filter(user=self.request.user)
+        # Start with only the user's orders
+        user = self.request.user
+        qs = Order.objects.filter(user=user)
+
+        # Get multiple 'status' query params, e.g. ?status=Pending&status=Finished
+        statuses = self.request.query_params.getlist('status')
+        if statuses:
+            qs = qs.filter(status__in=statuses)
+
+        return qs
 
 
 class OrderDetail(generics.RetrieveAPIView):
