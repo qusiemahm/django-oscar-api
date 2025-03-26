@@ -229,6 +229,7 @@ PRODUCTDETAIL_FIELDS = overridable(
         "calories",
         "preparation_time",
         "allergens",
+        "simple_attributes",
     ),
 )
 PRODUCT_FIELDS = overridable(
