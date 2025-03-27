@@ -604,7 +604,7 @@ class ProductSerializer(PublicProductSerializer):
                 branch_id = basket.branch
 
             # Step 3: If still not available, fall back to the user's vendor staff branch ID
-            if not branch_id:
+            if not branch_id and hasattr(self.context["request"].user, 'user_vendor_staff'):
                 branch_id = self.context["request"].user.user_vendor_staff.branch.id
 
             # Step 4: Attempt to fetch the stock record for the determined branch_id
