@@ -567,6 +567,7 @@ class VendorSerializer(serializers.ModelSerializer):
     class Meta:
         model = Vendor
         fields = ['id', 'name']
+        
 class ProductSerializer(PublicProductSerializer):
     "Serializer for public api with strategy fields added for price and availability"
     # url = serializers.HyperlinkedIdentityField(view_name="product-detail")
@@ -597,6 +598,10 @@ class ProductSerializer(PublicProductSerializer):
             """
             # Step 1: Try to get branch_id from the query (assuming it's passed in the request)
             branch_id = self.context["request"].query_params.get("branch_id")
+            
+            # Also check for "branch" parameter since CategoryList uses "branch" not "branch_id"
+            if not branch_id:
+                branch_id = self.context["request"].query_params.get("branch")
 
             # Step 2: If not from the query, try to get it from the basket
             if not branch_id:
