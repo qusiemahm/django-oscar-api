@@ -480,14 +480,25 @@ class ProductStockRecordSerializer(OscarModelSerializer):
         Calculate the available to buy quantity as num_in_stock - num_allocated.
         """
         try:
-            return max(0, obj.num_in_stock - obj.num_allocated)
-        except:
-            return
+            # Handle the case where num_in_stock or num_allocated might be None
+            num_in_stock = obj.num_in_stock or 0
+            num_allocated = obj.num_allocated or 0
+            return max(0, num_in_stock - num_allocated)
+        except Exception:
+            # Return 0 as a safe default if any error occurs
+            return 0
     def get_in_stock(self, obj):
         """
         Check if the product is in stock.
         """
-        return max(0, obj.num_in_stock - obj.num_allocated) > 0
+        try:
+            # Handle the case where num_in_stock or num_allocated might be None
+            num_in_stock = obj.num_in_stock or 0
+            num_allocated = obj.num_allocated or 0
+            return max(0, num_in_stock - num_allocated) > 0
+        except Exception:
+            # Return False as a safe default if any error occurs
+            return False
     
     class Meta:
         model = StockRecord
