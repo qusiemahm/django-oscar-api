@@ -316,7 +316,7 @@ class CheckoutSerializer(serializers.Serializer, OrderPlacementMixin):
                 raise serializers.ValidationError(message)
 
         vehicle = attrs.get('vehicle')
-        if vehicle and vehicle.customer_id != request.user.id:
+        if vehicle and vehicle.customer.user.id != request.user.id:
             raise serializers.ValidationError("You cannot use a vehicle that does not belong to you.")
 
 
