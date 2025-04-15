@@ -6,6 +6,7 @@ from oscarapi.utils.loading import get_api_classes
 from rest_framework import generics, permissions, status
 from rest_framework.exceptions import ParseError
 from django.utils.translation import gettext_lazy as _
+from django.db import IntegrityError
 
 
 UserAddress = get_model('address', 'UserAddress')
@@ -69,7 +70,12 @@ class UserAddressDetailView(generics.RetrieveUpdateDestroyAPIView):
 
         serializer = self.get_serializer(instance, data=request.data, partial=partial)
         serializer.is_valid(raise_exception=True)
-        self.perform_update(serializer)
+        try:
+            self.perform_update(serializer)
+        except IntegrityError as e:
+            if 'address_useraddress_user_id_address_name' in str(e):
+                return Response({"detail": _("An address with this name already exists for the user.")}, status=status.HTTP_400_BAD_REQUEST)
+            raise
 
         return Response(serializer.data)
     
