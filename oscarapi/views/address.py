@@ -26,11 +26,11 @@ class UserAddressListCreateView(generics.ListCreateAPIView):
     def perform_create(self, serializer):
         user = self.request.user
         validated_data = serializer.validated_data
-        line1 = validated_data.get('line1')
+        address_name = validated_data.get('address_name')
 
         # Check for duplicate hash
-        if UserAddress.objects.filter(user=user, line1=line1).exists():
-            raise ParseError(_("An address with this line already exists for the user."))
+        if UserAddress.objects.filter(user=user, address_name=address_name).exists():
+            raise ParseError(_("An address with this name already exists for the user."))
 
         # Handle default shipping logic
         is_default_for_shipping = validated_data.get('is_default_for_shipping', False)

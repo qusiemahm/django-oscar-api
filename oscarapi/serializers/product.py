@@ -10,6 +10,7 @@ from rest_framework.fields import empty
 
 from oscar.core.loading import get_model
 from oscarapi.basket import operations
+from django.db.models import F
 
 from oscarapi.utils.exists import bound_unique_together_get_or_create_multiple
 from oscarapi.utils.loading import get_api_classes
@@ -140,10 +141,49 @@ class CategorySerializer(BaseCategorySerializer):
     products = serializers.SerializerMethodField()
 
     def get_products(self, obj):
-        # Fetch products for the current category
+        """
+        Returns products for the current category filtered by:
+        - is_public=True
+        - 'branch' param from the request (if any)
+        - stockrecords with net_stock_level > 0 (num_in_stock > num_allocated)
+        Additionally, prints debug information about each product and its stock records.
+        """
+        request = self.context.get("request")  # DRF automatically puts `request` in context
+        branch_id = None
+
+        if request:
+            branch_id = request.query_params.get("branch")
+
+        # Base queryset: all public products in this category
         products = Product.objects.filter(categories=obj, is_public=True)
+
+        print("=== DEBUG: Initial products ===")
+        for p in products:
+            print(f"Product [ID={p.id}, Title={p.title}]")
+
+        # Optionally filter by branch & in-stock records
+        if branch_id:
+            print("=== DEBUG: Branch ID ===")
+            print(branch_id)
+            print("=== DEBUG: Branch ID ===")
+            products = products.filter(
+                stockrecords__branch_id=branch_id,
+                stockrecords__num_in_stock__gt=F("stockrecords__num_allocated")
+            ).distinct()
+
+            print("=== DEBUG: Filtered products by branch and in-stock ===")
+            for p in products:
+                print(f"Product [ID={p.id}, Title={p.title}]")
+                
+                for sr in p.stockrecords.all():
+                    print(
+                        f"   StockRecord [ID={sr.id}, Branch={sr.branch_id}, "
+                        f"   num_in_stock={sr.num_in_stock}, num_allocated={sr.num_allocated}]"
+                    )
+
         serializer = ProductSerializer(products, many=True, context=self.context)
         return serializer.data
+
 
     # class Meta(BaseCategorySerializer.Meta):
     #     fields = BaseCategorySerializer.Meta.fields + ['children', 'products']

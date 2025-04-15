@@ -133,12 +133,19 @@ class CategoryList(generics.ListAPIView):
 
         # Ensure branch_id is provided
         if not branch_id:
-            raise ValidationError({"branch": "This query parameter is required."})
+            raise ValidationError("branch parameter is required.")
 
         # Get the store and its vendor
         try:
             store = Store.objects.get(id=branch_id)
             vendor = store.vendor  # Access the related vendor
+            
+            # Validate store and vendor are active
+            if not store.is_active:
+                raise ValidationError({"branch": "This store is not active."})
+            if not vendor.is_valid:
+                raise ValidationError({"branch": "This vendor is not active."})
+                
         except Store.DoesNotExist:
             raise ValidationError({"branch": f"No store found with ID {branch_id}."})
         except AttributeError:
@@ -155,9 +162,6 @@ class CategoryList(generics.ListAPIView):
         queryset = queryset.filter(vendor=vendor)
 
         return queryset
-
-
-
 
 
 class CategoryDetail(generics.RetrieveAPIView):
