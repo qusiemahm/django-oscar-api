@@ -17,10 +17,14 @@ def field_length(fieldname):
 
 class UserSerializer(serializers.ModelSerializer):
     date_joined = serializers.DateTimeField(read_only=True)
+    full_name = serializers.SerializerMethodField()
 
     class Meta:
-        model = User
-        fields = settings.USER_FIELDS
+        model = get_user_model()
+        fields = ['id', 'first_name', 'last_name', 'email', 'phone_number', 'date_joined', 'username', 'full_name']
+
+    def get_full_name(self, obj):
+        return f"{obj.first_name} {obj.last_name}".strip()
 
 
 class LoginSerializer(serializers.Serializer):
