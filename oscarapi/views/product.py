@@ -1,6 +1,8 @@
 # pylint: disable=unbalanced-tuple-unpacking
 from rest_framework import generics
 from rest_framework.response import Response
+from django.db.models import Q
+from django.db.models import F
 
 from oscar.core.loading import get_class, get_model
 
@@ -130,6 +132,7 @@ class CategoryList(generics.ListAPIView):
         """
         breadcrumb_path = self.kwargs.get("breadcrumbs", None)
         branch_id = self.request.query_params.get("branch", None)
+        search_query = self.request.query_params.get("search", None)
 
         # Ensure branch_id is provided
         if not branch_id:
@@ -160,6 +163,19 @@ class CategoryList(generics.ListAPIView):
 
         # Filter by vendor
         queryset = queryset.filter(vendor=vendor)
+
+        # Filter to include only categories that have at least one matching product
+        queryset = queryset.filter(
+            product__is_public=True,
+            product__stockrecords__branch_id=branch_id,
+            product__stockrecords__num_in_stock__gt=F("product__stockrecords__num_allocated")
+        )
+
+        if search_query:
+            queryset = queryset.filter(
+                Q(product__title__icontains=search_query) |
+                Q(product__description__icontains=search_query)
+            )
 
         return queryset
 

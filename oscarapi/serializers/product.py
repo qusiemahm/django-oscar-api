@@ -163,23 +163,12 @@ class CategorySerializer(BaseCategorySerializer):
 
         # Optionally filter by branch & in-stock records
         if branch_id:
-            print("=== DEBUG: Branch ID ===")
-            print(branch_id)
-            print("=== DEBUG: Branch ID ===")
+            
             products = products.filter(
                 stockrecords__branch_id=branch_id,
                 stockrecords__num_in_stock__gt=F("stockrecords__num_allocated")
             ).distinct()
-
-            print("=== DEBUG: Filtered products by branch and in-stock ===")
-            for p in products:
-                print(f"Product [ID={p.id}, Title={p.title}]")
-                
-                for sr in p.stockrecords.all():
-                    print(
-                        f"   StockRecord [ID={sr.id}, Branch={sr.branch_id}, "
-                        f"   num_in_stock={sr.num_in_stock}, num_allocated={sr.num_allocated}]"
-                    )
+            
 
         serializer = ProductSerializer(products, many=True, context=self.context)
         return serializer.data
