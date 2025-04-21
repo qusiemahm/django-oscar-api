@@ -5,6 +5,7 @@ from django.db.models import Q
 from django.db.models import F
 
 from oscar.core.loading import get_class, get_model
+from collections import defaultdict
 
 from oscarapi.utils.categories import find_from_full_slug
 from oscarapi.utils.loading import get_api_classes, get_api_class
@@ -154,28 +155,48 @@ class CategoryList(generics.ListAPIView):
         except AttributeError:
             raise ValidationError({"branch": "This store has no associated vendor."})
 
-        # Get root nodes or filter by breadcrumbs
-        if breadcrumb_path:
-            category = find_from_full_slug(breadcrumb_path, separator="/")
-            queryset = category.get_children()
-        else:
-            queryset = Category.get_root_nodes()
+        queryset = (
+            find_from_full_slug(breadcrumb_path, "/").get_children()
+            if breadcrumb_path else
+            Category.get_root_nodes()
+        ).filter(vendor=vendor).distinct()
 
-        # Filter by vendor
-        queryset = queryset.filter(vendor=vendor)
-
-        # Filter to include only categories that have at least one matching product
-        queryset = queryset.filter(
-            product__is_public=True,
-            product__stockrecords__branch_id=branch_id,
-            product__stockrecords__num_in_stock__gt=F("product__stockrecords__num_allocated")
+        # Prefetch all public, in-stock products related to these categories
+        products = (
+            Product.objects
+            .filter(
+                is_public=True,
+                stockrecords__branch_id=branch_id,
+                stockrecords__num_in_stock__gt=F("stockrecords__num_allocated"),
+                categories__in=queryset,
+            )
+            .select_related()
+            .distinct()
         )
 
         if search_query:
-            queryset = queryset.filter(
-                Q(product__title__icontains=search_query) |
-                Q(product__description__icontains=search_query)
+            products = products.filter(
+                Q(title__icontains=search_query) |
+                Q(description__icontains=search_query)
             )
+        
+        # ── map products → category id ─────────────────────────────────────────
+        cat_products = defaultdict(list)
+        for product in products:
+            for cat in product.categories.all():
+                cat_products[cat.id].append(product)
+
+        # ── keep ONLY the categories that actually have products ───────────────
+        ids_with_products = [cid for cid, prods in cat_products.items() if prods]
+
+        if not ids_with_products:
+            return queryset.none()      # nothing to show
+
+        queryset = queryset.filter(id__in=ids_with_products)
+
+        # attach the pre‑filtered products to each remaining category
+        for cat in queryset:
+            cat.filtered_products = cat_products.get(cat.id, [])
 
         return queryset
 

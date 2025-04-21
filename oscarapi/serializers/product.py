@@ -141,37 +141,8 @@ class CategorySerializer(BaseCategorySerializer):
     products = serializers.SerializerMethodField()
 
     def get_products(self, obj):
-        """
-        Returns products for the current category filtered by:
-        - is_public=True
-        - 'branch' param from the request (if any)
-        - stockrecords with net_stock_level > 0 (num_in_stock > num_allocated)
-        Additionally, prints debug information about each product and its stock records.
-        """
-        request = self.context.get("request")  # DRF automatically puts `request` in context
-        branch_id = None
-
-        if request:
-            branch_id = request.query_params.get("branch")
-
-        # Base queryset: all public products in this category
-        products = Product.objects.filter(categories=obj, is_public=True)
-
-        print("=== DEBUG: Initial products ===")
-        for p in products:
-            print(f"Product [ID={p.id}, Title={p.title}]")
-
-        # Optionally filter by branch & in-stock records
-        if branch_id:
-            
-            products = products.filter(
-                stockrecords__branch_id=branch_id,
-                stockrecords__num_in_stock__gt=F("stockrecords__num_allocated")
-            ).distinct()
-            
-
-        serializer = ProductSerializer(products, many=True, context=self.context)
-        return serializer.data
+        products = getattr(obj, "filtered_products", [])
+        return ProductSerializer(products, many=True, context=self.context).data
 
 
     # class Meta(BaseCategorySerializer.Meta):
