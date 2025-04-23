@@ -50,6 +50,9 @@ AttributeValueField, CategoryField, SingleValueSlugRelatedField = get_api_classe
 )
 
 
+
+
+
 class ServiceSerializer(OscarModelSerializer):
     """
     Serializer for the Service model.
@@ -592,7 +595,6 @@ class ProductSerializer(PublicProductSerializer):
 
     images = ProductImageSerializer(many=True, required=False)
     children = ChildProductSerializer(many=True, required=False)
-
     # stockrecords = serializers.HyperlinkedIdentityField(
     #     view_name="product-stockrecords", read_only=True
     # )
@@ -603,6 +605,13 @@ class ProductSerializer(PublicProductSerializer):
         source="service",  # or 'services' if using a ManyToMany
     )
     stockrecords = serializers.SerializerMethodField()
+    allergens = serializers.SerializerMethodField()
+    
+    def get_allergens(self, obj):
+        # Lazy import to avoid circular dependency
+        from server.apps.catalogue.serializers import AllergenSerializer
+        return AllergenSerializer(obj.allergens.all(), many=True).data
+        
     def get_stockrecords(self, obj):
             """
             Retrieve the stock record for the product based on the branch_id.
