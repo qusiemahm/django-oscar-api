@@ -246,6 +246,8 @@ class BasketSerializer(serializers.HyperlinkedModelSerializer):
                 "name": branch.name,
                 "latitude": branch.location.y,
                 "longitude": branch.location.x,
+                "preparing_time": branch.preparing_time,
+                "phone": branch.phone,
             }
         return None  # Return None if no branch is associated
 
