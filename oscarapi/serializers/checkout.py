@@ -570,10 +570,10 @@ class DetailedOrderSerializer(OrderSerializer):
     """
     vehicle = VehicleSerializer(read_only=True)
     timeline = serializers.SerializerMethodField()
-    
+    order_rating = serializers.SerializerMethodField()
     class Meta(OrderSerializer.Meta):
         model = Order
-        fields = OrderSerializer.Meta.fields + ("vehicle", "timeline")
+        fields = OrderSerializer.Meta.fields + ("vehicle", "timeline", "order_rating")
     
     def to_representation(self, instance):
         # Get the standard representation
@@ -643,6 +643,12 @@ class DetailedOrderSerializer(OrderSerializer):
 
         timeline_events = obj.timeline_events.all().order_by('-date_created')
         return OrderTimelineEventSerializer(timeline_events, many=True).data
+
+    def get_order_rating(self, obj):
+        from oscar.core.loading import get_model
+        StoreRating = get_model('stores', 'StoreRating')
+        order_rating = StoreRating.objects.filter(order=obj).first()
+        return order_rating.rating if order_rating else None
 
 # # Create a custom serializer that includes detailed basket and product information
 # class DetailedOrderSerializer(OrderSerializer):
