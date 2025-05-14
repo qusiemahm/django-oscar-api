@@ -569,11 +569,11 @@ class DetailedOrderSerializer(OrderSerializer):
     instead of just URLs.
     """
     vehicle = VehicleSerializer(read_only=True)
-
+    timeline = serializers.SerializerMethodField()
     
     class Meta(OrderSerializer.Meta):
         model = Order
-        fields = OrderSerializer.Meta.fields + ("vehicle",)
+        fields = OrderSerializer.Meta.fields + ("vehicle", "timeline")
     
     def to_representation(self, instance):
         # Get the standard representation
@@ -638,6 +638,11 @@ class DetailedOrderSerializer(OrderSerializer):
         
         return products_data
 
+    def get_timeline(self, obj):
+        from server.apps.order.serializers import OrderTimelineEventSerializer
+
+        timeline_events = obj.timeline_events.all().order_by('-date_created')
+        return OrderTimelineEventSerializer(timeline_events, many=True).data
 
 # # Create a custom serializer that includes detailed basket and product information
 # class DetailedOrderSerializer(OrderSerializer):
