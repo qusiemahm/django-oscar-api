@@ -159,6 +159,7 @@ class OrderLineSerializer(OscarHyperlinkedModelSerializer):
                 "product",
                 "stockrecord",
                 "quantity",
+                "note",
                 "price_currency",
                 "price_excl_tax",
                 "price_incl_tax",
@@ -288,6 +289,29 @@ class CheckoutSerializer(serializers.Serializer, OrderPlacementMixin):
         if basket.num_items <= 0:
             message = _("Cannot checkout with empty basket")
             raise serializers.ValidationError(message)
+
+        # Validate availability for all basket lines to prevent checkout
+        # with out-of-stock items (handles stock changes after adding to basket)
+        messages_list = []
+
+        for line in basket.all_lines():
+            available_stock = line.stockrecord.num_in_stock - line.stockrecord.num_allocated
+            if available_stock is None or available_stock <= 0:
+                messages_list.append(
+                    _("'%(title)s' is out of stock. Please adjust your basket to continue")
+                    % {"title": line.product.get_title()}
+                )
+            elif available_stock < line.quantity:
+                messages_list.append(
+                    _("'%(title)s' only has %(stock)d available, but you requested %(qty)d.")
+                    % {
+                        "title": line.product.get_title(),
+                        "stock": available_stock,
+                        "qty": line.quantity,
+                    }
+                )   
+        if messages_list:
+            raise serializers.ValidationError({"availability": messages_list})
 
         shipping_method = self._shipping_method(
             request,
@@ -601,6 +625,7 @@ class DetailedOrderSerializer(OrderSerializer):
                 "total_incl_tax_excl_discounts": float(basket.total_incl_tax_excl_discounts),
                 "total_tax": float(basket.total_tax),
                 "currency": basket.currency,
+                "note": getattr(basket, "note", None),
                 "products": self._get_products_in_basket(basket),
             }
         

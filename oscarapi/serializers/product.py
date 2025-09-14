@@ -670,9 +670,11 @@ class AddProductSerializer(serializers.Serializer):  # pylint: disable=abstract-
     quantity = serializers.IntegerField(required=True)
     branch_id = serializers.IntegerField(required=True)
     confirm = serializers.BooleanField(required=False)
+    note = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     url = serializers.HyperlinkedRelatedField(
         view_name="product-detail", queryset=Product.objects, required=True
     )
     options = OptionValueSerializer(many=True, required=False)
+    
 
     

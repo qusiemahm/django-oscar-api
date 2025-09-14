@@ -99,6 +99,22 @@ class BasketView(APIView):
                 status=500  # Internal Server Error
             )
 
+    def patch(self, request, *args, **kwargs):
+        """
+        Partially update the basket. Currently supports updating the basket note.
+        Body example:
+        {
+            "note": "Please deliver to side door"
+        }
+        """
+        basket = operations.get_basket(request)
+        note = request.data.get("note", None)
+        basket.note = note
+        basket.save()
+
+        serializer = self.serializer_class(basket, context={"request": request})
+        return Response(serializer.data, status=200)
+
 class AddProductView(APIView):
     """
     Add a certain quantity of a product to the basket.
@@ -155,6 +171,7 @@ class AddProductView(APIView):
             options = p_ser.validated_data.get("options", [])
             branch_id = p_ser.validated_data.get("branch_id", [])
             confirm = p_ser.validated_data.get("confirm", False)  # Confirmation flag
+            note = p_ser.validated_data.get("note")
 
             # Validate the product addition
             basket_valid, message = self.validate(basket, branch_id, product, quantity, options)
@@ -180,7 +197,13 @@ class AddProductView(APIView):
                     basket.flush()
 
             # Add the product to the basket
-            basket.add_product(product, quantity=quantity, options=options)
+            line, created = basket.add_product(product, quantity=quantity, options=options)
+            if note:
+                try:
+                    line.note = note
+                    line.save()
+                except Exception:
+                    pass
             signals.basket_addition.send(
                 sender=self, product=product, user=request.user, request=request
             )

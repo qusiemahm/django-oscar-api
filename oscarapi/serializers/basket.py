@@ -110,7 +110,8 @@ class AbstractLineSerializer(serializers.ModelSerializer):
             'id',
             'product',  # This will now include all fields of the product
             'quantity',
-            'attributes'
+            'attributes',
+            'note'
         ]
 class ProductInBasketSerializer(serializers.Serializer):
     product_id = serializers.IntegerField()
@@ -180,6 +181,7 @@ class BasketSerializer(serializers.HyperlinkedModelSerializer):
                 "price_currency": line.product.price_currency,  # Add product title
                 "selling_price": line.product.selling_price,  # Add product title
                 "image": self.get_product_images(line.product),  # Add product images
+                "note": line.note,
             }
 
             # Append the line data to the product's list
