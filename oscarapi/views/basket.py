@@ -461,7 +461,13 @@ class BasketLineDetail(generics.RetrieveUpdateDestroyAPIView):
         # Extract validated data
         new_quantity = serializer.validated_data.get("quantity", instance.quantity)
         new_options = serializer.validated_data.get("options", [])
-        branch_id = request.data.get("branch_id")
+        new_note = serializer.validated_data.get("note", instance.note)
+        branch_id = request.data.get("branch_id") or getattr(instance.basket.branch, "id", None)
+        if branch_id is None:
+            return Response(
+                {"error": _("Branch is required.")},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         # Validate input for quantity
         if not isinstance(new_quantity, int) or new_quantity <= 0:
@@ -473,13 +479,22 @@ class BasketLineDetail(generics.RetrieveUpdateDestroyAPIView):
         # Perform stock validation
         basket = instance.basket
         product = instance.product
-        options = list(instance.attributes.values("option", "value"))  # Current options
-        basket_valid, message = self.validate(basket, branch_id, product, new_quantity, options)
+        # Use new options for validation if provided; otherwise use current
+        options_for_validation = (
+            new_options if new_options else list(instance.attributes.values("option", "value"))
+        )
+        # Desired qty = current in basket minus existing line qty + new qty
+        current_qty = basket.product_quantity(product)
+        desired_qty = current_qty - instance.quantity + new_quantity
+        basket_valid, message = self.validate(
+            basket, branch_id, product, desired_qty, options_for_validation
+        )
         if not basket_valid:
             return Response({"error": message}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Update the quantity
+        # Update the quantity and note
         instance.quantity = new_quantity
+        instance.note = new_note
 
         # Update the options
         if new_options:
