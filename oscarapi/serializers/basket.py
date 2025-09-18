@@ -232,6 +232,7 @@ class BasketSerializer(serializers.HyperlinkedModelSerializer):
             return {
                 "id": branch.vendor.id,
                 "name": branch.vendor.name,
+                "brand_name": branch.vendor.business_details.brand_name,
             }
         return None  # Return None if no vendor is associated
 
