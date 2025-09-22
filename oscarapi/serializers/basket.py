@@ -1,6 +1,8 @@
 # pylint: disable=W0223
 import logging
 from decimal import Decimal
+from django.conf import settings as django_settings
+from django.db.models import Q
 
 from django.utils.translation import gettext as _
 from django.contrib.auth import get_user_model
@@ -31,6 +33,7 @@ StockRecord = get_model("partner", "StockRecord")
 Voucher = get_model("voucher", "Voucher")
 Product = get_model("catalogue", "Product")
 ProductImage = get_model("catalogue", "ProductImage")
+AttributeOption = get_model("catalogue", "AttributeOption")
 Store = get_model('stores', 'Store')
 class LineAttributeSerializer(OscarHyperlinkedModelSerializer):
     url = DrillDownHyperlinkedIdentityField(
@@ -50,12 +53,48 @@ class LineAttributeSerializer(OscarHyperlinkedModelSerializer):
 
     def get_price(self, obj):
         """
-        Retrieve the price of the related Option.
+        Retrieve the price for the selected attribute option(s), independent of locale.
+        Supports values stored as id, pk, string label, or list of these.
         """
         try:
-           attribute_option = obj.option.option_group.options.get(option=obj.value)  # Retrieve all related AttributeOption objects
-           return str(attribute_option.price) 
-        except :
+            group = getattr(obj.option, "option_group", None)
+            value = obj.value
+
+            # Build translatable fields to query across all languages
+            option_fields = ["option"] + [f"option_{code}" for code, _ in getattr(django_settings, "LANGUAGES", [])]
+
+            def resolve_one(val):
+                # Try by primary key if possible
+                try:
+                    if isinstance(val, dict):
+                        candidate_id = val.get("id") or val.get("pk")
+                        if candidate_id:
+                            return (group.options if group else AttributeOption.objects).get(pk=candidate_id)
+                    if isinstance(val, int) or (isinstance(val, str) and val.isdigit()):
+                        return (group.options if group else AttributeOption.objects).get(pk=int(val))
+                except AttributeOption.DoesNotExist:
+                    pass
+
+                # Fall back to label matching across translations (case-insensitive)
+                if val is not None:
+                    q = Q()
+                    sval = str(val).strip()
+                    for field in option_fields:
+                        q |= Q(**{f"{field}__iexact": sval})
+                    qs = (group.options if group else AttributeOption.objects).filter(q)
+                    return qs.first()
+                return None
+
+            # Support list of selected values (e.g., multi-select)
+            values = value if isinstance(value, (list, tuple)) else [value]
+            total_price = Decimal("0.00")
+            for v in values:
+                ao = resolve_one(v)
+                if ao and getattr(ao, "price", None) is not None:
+                    total_price += Decimal(str(ao.price))
+
+            return str(total_price)
+        except Exception:
             return str(0)
         
     def get_type(self, obj):

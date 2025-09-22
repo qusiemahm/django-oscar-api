@@ -676,5 +676,84 @@ class AddProductSerializer(serializers.Serializer):  # pylint: disable=abstract-
     )
     options = OptionValueSerializer(many=True, required=False)
     
+    def validate(self, attrs):
+        """
+        Ensure all required product options are provided with non-empty values.
+        """
+        product = attrs.get("url")
+        provided_options = attrs.get("options", []) or []
+
+        # Build a map of provided option id -> value
+        option_id_to_value = {}
+        for item in provided_options:
+            option = item.get("option")
+            value = item.get("value")
+            if option is not None:
+                option_id_to_value[getattr(option, "id", option)] = value
+
+        # Determine required options for the product
+        required_options = [opt for opt in product.options.all() if getattr(opt, "required", False)]
+
+        missing_names = []
+        for opt in required_options:
+            val = option_id_to_value.get(opt.id, None)
+            is_empty = (
+                val is None
+                or (isinstance(val, str) and val.strip() == "")
+                or (isinstance(val, (list, tuple)) and len(val) == 0)
+            )
+            if is_empty:
+                missing_names.append(opt.name)
+
+        if missing_names:
+            # Raise a validation error tied to the options field
+            raise serializers.ValidationError(
+                {
+                    "options": _(
+                        "Missing required options: %(opts)s"
+                    )
+                    % {"opts": ", ".join(missing_names)}
+                }
+            )
+
+        # Validate provided option values against allowed values for that option (if applicable)
+        invalid_messages = []
+        for item in provided_options:
+            option = item.get("option")
+            value = item.get("value")
+
+            # Skip empty values here; required check above already handles empties for required ones
+            if value in (None, ""):
+                continue
+
+            # Only validate against option groups for select/radio/multi-select/checkbox types
+            if hasattr(option, "option_group") and option.option_group:
+                allowed_values = set(option.option_group.options.values_list("option", flat=True))
+
+                if getattr(option, "is_multi_option", False):
+                    # Support either list/tuple or comma-separated string input
+                    if isinstance(value, (list, tuple)):
+                        values_to_check = [str(v).strip() for v in value if str(v).strip() != ""]
+                    else:
+                        values_to_check = [v.strip() for v in str(value).split(",") if v.strip() != ""]
+
+                    invalid = [v for v in values_to_check if v not in allowed_values]
+                    if invalid:
+                        invalid_messages.append(
+                            _("Invalid value(s) for option '%(name)s': %(vals)s")
+                            % {"name": option.name, "vals": ", ".join(invalid)}
+                        )
+                elif getattr(option, "is_option", False) or getattr(option, "is_select", False) or getattr(option, "is_radio", False):
+                    # Single choice value must be within allowed
+                    if str(value) not in allowed_values:
+                        invalid_messages.append(
+                            _("Invalid value for option '%(name)s': %(val)s")
+                            % {"name": option.name, "val": value}
+                        )
+
+        if invalid_messages:
+            raise serializers.ValidationError({"options": " ".join(invalid_messages)})
+
+        return attrs
 
     
