@@ -656,10 +656,34 @@ class ProductLinkSerializer(ProductSerializer):
 
 
 class OptionValueSerializer(serializers.Serializer):  # pylint: disable=abstract-method
+    """
+    Serializer for option values when adding products to basket.
+    Now accepts AttributeOption ID instead of option name.
+    """
     option = serializers.HyperlinkedRelatedField(
-        view_name="option-detail", queryset=Option.objects
+        view_name="option-detail", 
+        queryset=Option.objects
     )
-    value = serializers.CharField()
+    # Changed from CharField to PrimaryKeyRelatedField to accept AttributeOption ID
+    value = serializers.PrimaryKeyRelatedField(
+        queryset=AttributeOption.objects,
+        help_text="The ID of the selected AttributeOption"
+    )
+    
+    def to_representation(self, instance):
+        """
+        Return both ID and name in the response for convenience
+        """
+        ret = super().to_representation(instance)
+        # Optionally include the option name in responses
+        if 'value' in ret and ret['value'] is not None:
+            try:
+                option = AttributeOption.objects.get(id=ret['value'])
+                ret['value_name'] = option.option
+                ret['value_price'] = str(option.price) if option.price else None
+            except AttributeOption.DoesNotExist:
+                pass
+        return ret
 
 
 class AddProductSerializer(serializers.Serializer):  # pylint: disable=abstract-method
@@ -678,16 +702,16 @@ class AddProductSerializer(serializers.Serializer):  # pylint: disable=abstract-
     
     def validate(self, attrs):
         """
-        Ensure all required product options are provided with non-empty values.
+        Ensure all required product options are provided with valid AttributeOption IDs.
         """
         product = attrs.get("url")
         provided_options = attrs.get("options", []) or []
 
-        # Build a map of provided option id -> value
+        # Build a map of provided option id -> AttributeOption object
         option_id_to_value = {}
         for item in provided_options:
             option = item.get("option")
-            value = item.get("value")
+            value = item.get("value")  # Now this is an AttributeOption object
             if option is not None:
                 option_id_to_value[getattr(option, "id", option)] = value
 
@@ -697,16 +721,11 @@ class AddProductSerializer(serializers.Serializer):  # pylint: disable=abstract-
         missing_names = []
         for opt in required_options:
             val = option_id_to_value.get(opt.id, None)
-            is_empty = (
-                val is None
-                or (isinstance(val, str) and val.strip() == "")
-                or (isinstance(val, (list, tuple)) and len(val) == 0)
-            )
-            if is_empty:
+            # Value is now an AttributeOption object, so check if it's None
+            if val is None:
                 missing_names.append(opt.name)
 
         if missing_names:
-            # Raise a validation error tied to the options field
             raise serializers.ValidationError(
                 {
                     "options": _(
@@ -716,44 +735,32 @@ class AddProductSerializer(serializers.Serializer):  # pylint: disable=abstract-
                 }
             )
 
-        # Validate provided option values against allowed values for that option (if applicable)
+        # Validate that provided AttributeOption IDs belong to the correct option group
         invalid_messages = []
         for item in provided_options:
             option = item.get("option")
-            value = item.get("value")
+            value = item.get("value")  # AttributeOption object
 
-            # Skip empty values here; required check above already handles empties for required ones
-            if value in (None, ""):
+            # Skip if no value provided
+            if value is None:
                 continue
 
-            # Only validate against option groups for select/radio/multi-select/checkbox types
+            # Verify the AttributeOption belongs to this Option's option_group
             if hasattr(option, "option_group") and option.option_group:
-                allowed_values = set(option.option_group.options.values_list("option", flat=True))
-
-                if getattr(option, "is_multi_option", False):
-                    # Support either list/tuple or comma-separated string input
-                    if isinstance(value, (list, tuple)):
-                        values_to_check = [str(v).strip() for v in value if str(v).strip() != ""]
-                    else:
-                        values_to_check = [v.strip() for v in str(value).split(",") if v.strip() != ""]
-
-                    invalid = [v for v in values_to_check if v not in allowed_values]
-                    if invalid:
-                        invalid_messages.append(
-                            _("Invalid value(s) for option '%(name)s': %(vals)s")
-                            % {"name": option.name, "vals": ", ".join(invalid)}
-                        )
-                elif getattr(option, "is_option", False) or getattr(option, "is_select", False) or getattr(option, "is_radio", False):
-                    # Single choice value must be within allowed
-                    if str(value) not in allowed_values:
-                        invalid_messages.append(
-                            _("Invalid value for option '%(name)s': %(val)s")
-                            % {"name": option.name, "val": value}
-                        )
+                allowed_option_ids = set(
+                    option.option_group.options.values_list("id", flat=True)
+                )
+                
+                # Get the value ID (it's already an AttributeOption object)
+                value_id = value.id if hasattr(value, 'id') else value
+                
+                if value_id not in allowed_option_ids:
+                    invalid_messages.append(
+                        _("Invalid option value ID %(val)s for option '%(name)s'")
+                        % {"val": value_id, "name": option.name}
+                    )
 
         if invalid_messages:
             raise serializers.ValidationError({"options": " ".join(invalid_messages)})
 
         return attrs
-
-    
