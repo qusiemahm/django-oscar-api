@@ -196,8 +196,22 @@ class AddProductView(APIView):
                     # User confirmed, flush the cart
                     basket.flush()
 
-            # Add the product to the basket
-            line, created = basket.add_product(product, quantity=quantity, options=options)
+            # ✅ TRANSFORM OPTIONS TO STORE IDs INSTEAD OF NAMES
+            transformed_options = []
+            for option_data in options:
+                option = option_data['option']
+                value = option_data['value']  # This is now an AttributeOption object
+
+                # Store the AttributeOption ID as a string (Oscar expects string values)
+                # We prefix it with "ID:" so we can identify it later
+                transformed_options.append({
+                    'option': option,
+                    'value': f"ID:{value.id}"  # Store as "ID:27" instead of "مارشميلو"
+                })
+
+            # Add the product to the basket with transformed options
+            line, created = basket.add_product(product, quantity=quantity, options=transformed_options)
+
             if note:
                 try:
                     line.note = note
