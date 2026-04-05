@@ -1,12 +1,15 @@
 # pylint: disable=W0223
 import logging
 from decimal import Decimal
+from typing import Any
 from django.conf import settings as django_settings
 from django.db.models import Q
 
 from django.utils.translation import gettext as _
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import extend_schema_field, inline_serializer
 
 from oscar.core.loading import get_model
 
@@ -51,7 +54,8 @@ class LineAttributeSerializer(OscarHyperlinkedModelSerializer):
         model = LineAttribute
         fields = "__all__"  # Include all fields
 
-    def get_price(self, obj):
+    @extend_schema_field(serializers.DecimalField(max_digits=12, decimal_places=2))
+    def get_price(self, obj) -> str:
         """
         Retrieve the price for the selected attribute option(s), independent of locale.
         Supports values stored as id, pk, string label, or list of these.
@@ -97,7 +101,8 @@ class LineAttributeSerializer(OscarHyperlinkedModelSerializer):
         except Exception:
             return str(0)
         
-    def get_type(self, obj):
+    @extend_schema_field(OpenApiTypes.STR)
+    def get_type(self, obj) -> str:
         """
         Retrieve the type of the related Option.
         """
@@ -107,7 +112,8 @@ class LineAttributeSerializer(OscarHyperlinkedModelSerializer):
         except :
             return ""
         
-    def get_name(self, obj):
+    @extend_schema_field(OpenApiTypes.STR)
+    def get_name(self, obj) -> str:
         """
         Retrieve the name of the related Option.
         """
@@ -182,6 +188,7 @@ class BasketSerializer(serializers.HyperlinkedModelSerializer):
     )
     currency = serializers.CharField(required=False)
     voucher_discounts = VoucherDiscountSerializer(many=True, required=False)
+    is_tax_known = serializers.SerializerMethodField()
     branch = serializers.SerializerMethodField()  # Change to SerializerMethodField
     minimum_order_value = serializers.SerializerMethodField(  read_only=True,)
 
@@ -199,7 +206,9 @@ class BasketSerializer(serializers.HyperlinkedModelSerializer):
         model = Basket
         fields = settings.BASKET_FIELDS
 
-    def get_products_in_basket(self, obj):
+    @extend_schema_field(OpenApiTypes.OBJECT)
+    @extend_schema_field(OpenApiTypes.OBJECT)
+    def get_products_in_basket(self, obj) -> dict[str, list[dict[str, Any]]]:
         """
         Custom method to retrieve product information from the basket.
         `obj` is the Basket instance being serialized.
@@ -229,6 +238,10 @@ class BasketSerializer(serializers.HyperlinkedModelSerializer):
             products_data[product_id].append(line_data)
 
         return products_data
+    @extend_schema_field(OpenApiTypes.BOOL)
+    def get_is_tax_known(self, obj) -> bool:
+        return bool(obj.is_tax_known)
+
     def get_product_images(self, product):
             """
             Helper method to retrieve product images using the `get_all_images` method.
@@ -260,7 +273,17 @@ class BasketSerializer(serializers.HyperlinkedModelSerializer):
 
         # Return as a dictionary if there's only one attribute, otherwise return a list
         return attributes
-    def get_vendor(self, obj):
+    @extend_schema_field(
+        inline_serializer(
+            name="BasketVendorSummarySerializer",
+            fields={
+                "id": serializers.IntegerField(),
+                "name": serializers.CharField(),
+                "brand_name": serializers.CharField(allow_null=True, allow_blank=True),
+            },
+        )
+    )
+    def get_vendor(self, obj) -> dict[str, Any] | None:
         """
         Custom method to retrieve the vendor information from the branch.
         `obj` is the Basket instance being serialized.
@@ -276,7 +299,20 @@ class BasketSerializer(serializers.HyperlinkedModelSerializer):
         return None  # Return None if no vendor is associated
 
 
-    def get_branch(self, obj):
+    @extend_schema_field(
+        inline_serializer(
+            name="BasketBranchSummarySerializer",
+            fields={
+                "id": serializers.IntegerField(),
+                "name": serializers.CharField(),
+                "latitude": serializers.FloatField(),
+                "longitude": serializers.FloatField(),
+                "preparing_time": serializers.IntegerField(allow_null=True),
+                "phone": serializers.CharField(allow_blank=True, allow_null=True),
+            },
+        )
+    )
+    def get_branch(self, obj) -> dict[str, Any] | None:
         """
         Custom method to retrieve branch information.
         `obj` is the Basket instance being serialized.
@@ -293,7 +329,8 @@ class BasketSerializer(serializers.HyperlinkedModelSerializer):
             }
         return None  # Return None if no branch is associated
 
-    def get_minimum_order_value(self, obj):
+    @extend_schema_field(serializers.DecimalField(max_digits=12, decimal_places=2))
+    def get_minimum_order_value(self, obj) -> Decimal:
         branch = obj.branch
         
         return Decimal(str(branch.minimum_order_value)) if branch else Decimal('0.00')
@@ -333,6 +370,7 @@ class BasketLineSerializer(OscarHyperlinkedModelSerializer):
     price_excl_tax_excl_discounts = serializers.DecimalField(
         decimal_places=2, max_digits=12, source="line_price_excl_tax", read_only=True
     )
+    is_tax_known = serializers.SerializerMethodField()
     warning = serializers.CharField(
         read_only=True, required=False, source="get_warning"
     )
@@ -347,6 +385,10 @@ class BasketLineSerializer(OscarHyperlinkedModelSerializer):
     class Meta:
         model = Line
         fields = settings.BASKETLINE_FIELDS
+
+    @extend_schema_field(OpenApiTypes.BOOL)
+    def get_is_tax_known(self, obj) -> bool:
+        return bool(obj.is_tax_known)
 
     def to_representation(self, instance):
         # This override is needed to reflect offer discounts or strategy

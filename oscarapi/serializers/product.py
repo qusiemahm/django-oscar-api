@@ -2,11 +2,14 @@
 
 import logging
 from copy import deepcopy
+from typing import Any
 from django.db.models.manager import Manager
 from django.utils.translation import gettext as _
 
 from rest_framework import serializers
 from rest_framework.fields import empty
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import extend_schema_field, inline_serializer
 
 from oscar.core.loading import get_model
 from oscarapi.basket import operations
@@ -77,7 +80,25 @@ class ServiceSerializer(OscarModelSerializer):
         # you can set:
         # list_serializer_class = SomeUpdateListSerializer
         
-    def get_available_time_slots(self, obj):
+    @extend_schema_field(
+        inline_serializer(
+            name="ServiceAvailableDaySerializer",
+            fields={
+                "date": serializers.CharField(),
+                "weekday": serializers.CharField(),
+                "slots": inline_serializer(
+                    name="ServiceAvailableSlotSerializer",
+                    fields={
+                        "start": serializers.CharField(),
+                        "end": serializers.CharField(),
+                    },
+                    many=True,
+                ),
+            },
+            many=True,
+        )
+    )
+    def get_available_time_slots(self, obj) -> list[dict[str, Any]]:
         """
         Call the Service model method that calculates available slots.
         """
@@ -478,7 +499,8 @@ class ProductStockRecordSerializer(OscarModelSerializer):
     available_to_buy = serializers.SerializerMethodField()
     in_stock = serializers.SerializerMethodField()
     
-    def get_available_to_buy(self, obj):
+    @extend_schema_field(OpenApiTypes.INT)
+    def get_available_to_buy(self, obj) -> int:
         """
         Calculate the available to buy quantity as num_in_stock - num_allocated.
         """
@@ -490,7 +512,8 @@ class ProductStockRecordSerializer(OscarModelSerializer):
         except Exception:
             # Return 0 as a safe default if any error occurs
             return 0
-    def get_in_stock(self, obj):
+    @extend_schema_field(OpenApiTypes.BOOL)
+    def get_in_stock(self, obj) -> bool:
         """
         Check if the product is in stock.
         """
@@ -607,12 +630,14 @@ class ProductSerializer(PublicProductSerializer):
     stockrecords = serializers.SerializerMethodField()
     allergens = serializers.SerializerMethodField()
     
-    def get_allergens(self, obj):
+    @extend_schema_field(OpenApiTypes.OBJECT)
+    def get_allergens(self, obj) -> list[dict[str, Any]]:
         # Lazy import to avoid circular dependency
         from server.apps.catalogue.serializers import AllergenSerializer
         return AllergenSerializer(obj.allergens.all(), many=True).data
         
-    def get_stockrecords(self, obj):
+    @extend_schema_field(ProductStockRecordSerializer)
+    def get_stockrecords(self, obj) -> dict[str, Any]:
             """
             Retrieve the stock record for the product based on the branch_id.
             """

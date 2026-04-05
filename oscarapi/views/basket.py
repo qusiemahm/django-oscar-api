@@ -5,9 +5,10 @@ from oscarapi.permissions import IsOwner
 from oscar.apps.basket import signals
 from oscar.core.loading import get_model, get_class
 
-from rest_framework import status, generics, exceptions
+from rest_framework import status, generics, exceptions, serializers
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from drf_spectacular.utils import extend_schema, inline_serializer
 
 from oscarapi import permissions
 from oscarapi.basket import operations
@@ -568,7 +569,7 @@ class BasketLineDetail(generics.RetrieveUpdateDestroyAPIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
         
-class RemoveVoucherView(APIView):
+class RemoveVoucherView(generics.GenericAPIView):
     """
     Remove a voucher from the basket.
 
@@ -581,7 +582,31 @@ class RemoveVoucherView(APIView):
     If unsuccessful, will return 404 or 406 with an error.
     """
     permission_classes = [IsAuthenticated]
+    serializer_class = BasketSerializer
 
+    @extend_schema(
+        request=inline_serializer(
+            name="RemoveVoucherRequestSerializer",
+            fields={
+                "vouchercode": serializers.CharField(),
+            },
+        ),
+        responses={
+            200: BasketSerializer,
+            400: inline_serializer(
+                name="RemoveVoucherBadRequestSerializer",
+                fields={"error": serializers.CharField()},
+            ),
+            404: inline_serializer(
+                name="RemoveVoucherNotFoundSerializer",
+                fields={"error": serializers.CharField()},
+            ),
+            406: inline_serializer(
+                name="RemoveVoucherNotAcceptableSerializer",
+                fields={"error": serializers.CharField()},
+            ),
+        },
+    )
     def delete(self, request, *args, **kwargs):
         vouchercode = request.data.get("vouchercode")
 
