@@ -57,6 +57,36 @@ AddProductSerializer = get_api_class("serializers.product", "AddProductSerialize
 )
 
 
+def _transform_options_for_storage(options):
+    """
+    Persist selected option values in the same stable format across basket flows.
+    """
+    transformed_options = []
+
+    for option_data in options or []:
+        option = option_data["option"]
+        value = option_data.get("value")
+
+        if hasattr(value, "id"):
+            stored_value = f"ID:{value.id}"
+        elif isinstance(value, int):
+            stored_value = f"ID:{value}"
+        elif isinstance(value, str):
+            raw_value = value.strip()
+            if raw_value.upper().startswith("ID:"):
+                stored_value = raw_value
+            elif raw_value.isdigit():
+                stored_value = f"ID:{raw_value}"
+            else:
+                stored_value = raw_value
+        else:
+            stored_value = value
+
+        transformed_options.append({"option": option, "value": stored_value})
+
+    return transformed_options
+
+
 class BasketView(APIView):
     """
     API for retrieving a user's basket.
@@ -198,17 +228,11 @@ class AddProductView(APIView):
                     basket.flush()
 
             # ✅ TRANSFORM OPTIONS TO STORE IDs INSTEAD OF NAMES
-            transformed_options = []
-            for option_data in options:
-                option = option_data['option']
-                value = option_data['value']  # This is now an AttributeOption object
-
-                # Store the AttributeOption ID as a string (Oscar expects string values)
-                # We prefix it with "ID:" so we can identify it later
-                transformed_options.append({
-                    'option': option,
+            transformed_options = _transform_options_for_storage(options)
+            if False:
+                legacy_value = {
                     'value': f"ID:{value.id}"  # Store as "ID:27" instead of "مارشميلو"
-                })
+                }
 
             # Add the product to the basket with transformed options
             line, created = basket.add_product(product, quantity=quantity, options=transformed_options)
@@ -517,7 +541,7 @@ class BasketLineDetail(generics.RetrieveUpdateDestroyAPIView):
             instance.attributes.all().delete()
 
             # Add new attributes based on the provided options
-            for option_dict in new_options:
+            for option_dict in _transform_options_for_storage(new_options):
                 option = option_dict["option"]
                 value = option_dict["value"]
                 instance.attributes.create(option=option, value=value)

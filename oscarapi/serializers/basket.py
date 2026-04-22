@@ -68,14 +68,26 @@ class LineAttributeSerializer(OscarHyperlinkedModelSerializer):
             option_fields = ["option"] + [f"option_{code}" for code, _ in getattr(django_settings, "LANGUAGES", [])]
 
             def resolve_one(val):
+                def extract_candidate_id(raw_value):
+                    if isinstance(raw_value, dict):
+                        raw_value = raw_value.get("id") or raw_value.get("pk")
+
+                    if isinstance(raw_value, str):
+                        raw_value = raw_value.strip()
+                        if raw_value.upper().startswith("ID:"):
+                            raw_value = raw_value.split(":", 1)[1].strip()
+
+                    if isinstance(raw_value, int):
+                        return raw_value
+                    if isinstance(raw_value, str) and raw_value.isdigit():
+                        return int(raw_value)
+                    return None
+
                 # Try by primary key if possible
                 try:
-                    if isinstance(val, dict):
-                        candidate_id = val.get("id") or val.get("pk")
-                        if candidate_id:
-                            return (group.options if group else AttributeOption.objects).get(pk=candidate_id)
-                    if isinstance(val, int) or (isinstance(val, str) and val.isdigit()):
-                        return (group.options if group else AttributeOption.objects).get(pk=int(val))
+                    candidate_id = extract_candidate_id(val)
+                    if candidate_id is not None:
+                        return (group.options if group else AttributeOption.objects).get(pk=candidate_id)
                 except AttributeOption.DoesNotExist:
                     pass
 
