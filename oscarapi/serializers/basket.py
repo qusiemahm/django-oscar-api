@@ -292,6 +292,22 @@ class BasketSerializer(serializers.HyperlinkedModelSerializer):
                 "id": serializers.IntegerField(),
                 "name": serializers.CharField(),
                 "brand_name": serializers.CharField(allow_null=True, allow_blank=True),
+                "vendor_type": inline_serializer(
+                    name="BasketVendorTypeSerializer",
+                    fields={
+                        "id": serializers.IntegerField(),
+                        "name": serializers.CharField(),
+                    },
+                    allow_null=True,
+                ),
+                "business_category": inline_serializer(
+                    name="BasketBusinessCategorySerializer",
+                    fields={
+                        "id": serializers.IntegerField(),
+                        "name": serializers.CharField(),
+                    },
+                    allow_null=True,
+                ),
             },
         )
     )
@@ -301,12 +317,26 @@ class BasketSerializer(serializers.HyperlinkedModelSerializer):
         `obj` is the Basket instance being serialized.
         """
         branch = obj.branch  # Access the related branch
- 
+
         if branch and branch.vendor:  # Ensure the branch and vendor exist
+            vendor = branch.vendor
+            business_details = getattr(vendor, "business_details", None)
+            business_type = getattr(business_details, "business_type", None) if business_details else None
+            business_category = getattr(business_type, "business_category", None) if business_type else None
             return {
-                "id": branch.vendor.id,
-                "name": branch.vendor.name,
-                "brand_name": branch.vendor.business_details.brand_name,
+                "id": vendor.id,
+                "name": vendor.name,
+                "brand_name": business_details.brand_name if business_details else None,
+                "vendor_type": (
+                    {"id": business_type.id, "name": business_type.name}
+                    if business_type
+                    else None
+                ),
+                "business_category": (
+                    {"id": business_category.id, "name": business_category.name}
+                    if business_category
+                    else None
+                ),
             }
         return None  # Return None if no vendor is associated
 
