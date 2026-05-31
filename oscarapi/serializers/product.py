@@ -74,6 +74,7 @@ class ServiceSerializer(OscarModelSerializer):
             "duration_minutes",
             "max_services_per_slot",
             "max_notice_days",
+            "location_type",
             "available_time_slots",
         ]
         # If you want a custom list serializer that supports "updates", 

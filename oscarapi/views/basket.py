@@ -454,8 +454,8 @@ class LineList(BasketPermissionMixin, generics.ListCreateAPIView):
 
 class BasketLineDetail(generics.RetrieveUpdateDestroyAPIView):
     """
-    Only the field `quantity` can be changed in this view.
-    All other fields are readonly.
+    The fields `quantity`, `note`, `options` and `service_start_at` (for service
+    lines) can be changed in this view. All other fields are readonly.
     """
     queryset = Line.objects.all()
     serializer_class = BasketLineSerializer
@@ -556,6 +556,45 @@ class BasketLineDetail(generics.RetrieveUpdateDestroyAPIView):
                 option = option_dict["option"]
                 value = option_dict["value"]
                 instance.attributes.create(option=option, value=value)
+
+        # Reschedule the booked service slot, if a new start time was supplied.
+        if "service_start_at" in request.data:
+            service_obj = instance.service
+            if service_obj is None:
+                return Response(
+                    {"error": _("This line has no service to reschedule.")},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            try:
+                new_start_at = serializers.DateTimeField().to_internal_value(
+                    request.data.get("service_start_at")
+                )
+            except serializers.ValidationError as exc:
+                return Response(
+                    {"service_start_at": exc.detail},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            # Honour the same notice-period and capacity rules as add-to-basket
+            # and checkout. Exclude this basket so the line's own existing
+            # booking doesn't count against the slot.
+            try:
+                service_obj.validate_booking(new_start_at)
+            except ValueError as exc:
+                return Response(
+                    {"service_start_at": str(exc)},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            booked_count = service_obj.get_booked_count_for_slot(
+                new_start_at, exclude_basket=basket
+            )
+            if booked_count + new_quantity > service_obj.max_services_per_slot:
+                return Response(
+                    {"service_start_at": _(
+                        "This time slot is fully booked. Please select a different time."
+                    )},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            instance.service_start_at = new_start_at
 
         # Save the updated instance
         instance.save()
