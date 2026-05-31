@@ -720,17 +720,58 @@ class AddProductSerializer(serializers.Serializer):  # pylint: disable=abstract-
     branch_id = serializers.IntegerField(required=True)
     confirm = serializers.BooleanField(required=False)
     note = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    service_id = serializers.IntegerField(required=False, allow_null=True)
+    service_start_at = serializers.DateTimeField(required=False, allow_null=True)
     url = serializers.HyperlinkedRelatedField(
         view_name="product-detail", queryset=Product.objects, required=True
     )
     options = OptionValueSerializer(many=True, required=False)
-    
+
     def validate(self, attrs):
         """
         Ensure all required product options are provided with valid AttributeOption IDs.
+        Also validate the service slot when booking a service-type product.
         """
         product = attrs.get("url")
         provided_options = attrs.get("options", []) or []
+
+        service_id = attrs.get("service_id")
+        service_start_at = attrs.get("service_start_at")
+
+        has_services = product.service.exists()
+        if has_services and not (service_id and service_start_at):
+            raise serializers.ValidationError(
+                {"service_id": _(
+                    "This product requires a service time slot. "
+                    "Please provide both service_id and service_start_at."
+                )}
+            )
+
+        if service_id or service_start_at:
+            if not (service_id and service_start_at):
+                raise serializers.ValidationError(
+                    {"service_start_at": _("Both service_id and service_start_at are required to book a slot.")}
+                )
+            try:
+                service_obj = product.service.get(id=service_id)
+            except Service.DoesNotExist:
+                raise serializers.ValidationError(
+                    {"service_id": _("Selected service is not available for this product.")}
+                )
+            try:
+                service_obj.validate_booking(service_start_at)
+            except ValueError as exc:
+                raise serializers.ValidationError({"service_start_at": str(exc)})
+
+            booked_count = service_obj.get_booked_count_for_slot(service_start_at)
+            if booked_count >= service_obj.max_services_per_slot:
+                raise serializers.ValidationError(
+                    {"service_start_at": _(
+                        "This time slot is fully booked. "
+                        "Please select a different time."
+                    )}
+                )
+            attrs["_resolved_service"] = service_obj
 
         # Build a map of provided option id -> AttributeOption object
         option_id_to_value = {}

@@ -243,6 +243,17 @@ class AddProductView(APIView):
                     line.save()
                 except Exception:
                     pass
+
+            service_id = p_ser.validated_data.get("service_id")
+            service_start_at = p_ser.validated_data.get("service_start_at")
+            if service_id and service_start_at:
+                try:
+                    line.service_id = service_id
+                    line.service_start_at = service_start_at
+                    line.save(update_fields=["service_id", "service_start_at"])
+                except Exception:
+                    pass
+
             signals.basket_addition.send(
                 sender=self, product=product, user=request.user, request=request
             )

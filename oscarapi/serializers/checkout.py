@@ -148,6 +148,8 @@ class OrderLineSerializer(OscarHyperlinkedModelSerializer):
         extra_url_kwargs={"product_pk": "product_id"},
         queryset=StockRecord.objects.all(),
     )
+    service_id = serializers.IntegerField(source="service.id", read_only=True, default=None, allow_null=True)
+    service_start_at = serializers.DateTimeField(read_only=True, default=None, allow_null=True)
 
     class Meta:
         model = OrderLine
@@ -166,6 +168,8 @@ class OrderLineSerializer(OscarHyperlinkedModelSerializer):
                 "price_incl_tax_excl_discounts",
                 "price_excl_tax_excl_discounts",
                 "order",
+                "service_id",
+                "service_start_at",
             ),
         )
 
@@ -312,6 +316,50 @@ class CheckoutSerializer(serializers.Serializer, OrderPlacementMixin):
                 )   
         if messages_list:
             raise serializers.ValidationError({"availability": messages_list})
+
+        from server.apps.service.models import Service
+
+        service_messages = []
+        for line in basket.all_lines():
+            if line.product and line.product.service.exists():
+                if not line.service_id:
+                    service_messages.append(
+                        _("'%(title)s' requires a service time slot to complete checkout.")
+                        % {"title": line.product.get_title()}
+                    )
+                else:
+                    try:
+                        service_obj = Service.objects.get(id=line.service_id)
+                    except Service.DoesNotExist:
+                        service_messages.append(
+                            _("'%(title)s' has an invalid service selection.")
+                            % {"title": line.product.get_title()}
+                        )
+                        continue
+                    if not line.service_start_at:
+                        service_messages.append(
+                            _("'%(title)s' requires a service start time to complete checkout.")
+                            % {"title": line.product.get_title()}
+                        )
+                        continue
+                    try:
+                        service_obj.validate_booking(line.service_start_at)
+                    except ValueError as exc:
+                        service_messages.append(
+                            _("'%(title)s': %(error)s")
+                            % {"title": line.product.get_title(), "error": str(exc)}
+                        )
+                        continue
+                    booked_count = service_obj.get_booked_count_for_slot(
+                        line.service_start_at, exclude_basket=basket
+                    )
+                    if booked_count + line.quantity > service_obj.max_services_per_slot:
+                        service_messages.append(
+                            _("'%(title)s' time slot is fully booked. Please select a different time.")
+                            % {"title": line.product.get_title()}
+                        )
+        if service_messages:
+            raise serializers.ValidationError({"service_slots": service_messages})
 
         shipping_method = self._shipping_method(
             request,

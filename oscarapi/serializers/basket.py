@@ -161,6 +161,9 @@ class AbstractLineSerializer(serializers.ModelSerializer):
     attributes = LineAttributeSerializer(
         many=True, fields=("id", "option", "value","price","type","name"), required=False, read_only=True
     )
+    service_id = serializers.IntegerField(source="service.id", read_only=True, default=None, allow_null=True)
+    service_start_at = serializers.DateTimeField(read_only=True, default=None, allow_null=True)
+
     class Meta:
         model = Line
         fields = [
@@ -168,7 +171,9 @@ class AbstractLineSerializer(serializers.ModelSerializer):
             'product',  # This will now include all fields of the product
             'quantity',
             'attributes',
-            'note'
+            'note',
+            'service_id',
+            'service_start_at',
         ]
 class ProductInBasketSerializer(serializers.Serializer):
     product_id = serializers.IntegerField()
@@ -242,6 +247,8 @@ class BasketSerializer(serializers.HyperlinkedModelSerializer):
                 "selling_price": line.product.selling_price,  # Add product title
                 "image": self.get_product_images(line.product),  # Add product images
                 "note": line.note,
+                "service_id": line.service_id,
+                "service_start_at": line.service_start_at.isoformat() if line.service_start_at else None,
             }
 
             # Append the line data to the product's list
