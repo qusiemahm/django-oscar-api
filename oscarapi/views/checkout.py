@@ -70,6 +70,16 @@ class OrderList(generics.ListAPIView):
         if statuses:
             qs = qs.filter(status__in=statuses)
 
+        # Filter by the vendor's business type, e.g. ?business_type=3
+        # NOTE: what the app shows as "business_type" is the BusinessCategory
+        # (vendor.business_details.business_type.business_category), so we match
+        # against business_category_id, not the intermediate BusinessType.
+        business_type = self.request.query_params.get('business_type')
+        if business_type:
+            qs = qs.filter(
+                store__vendor__business_details__business_type__business_category_id=business_type
+            )
+
         return qs
 
 
