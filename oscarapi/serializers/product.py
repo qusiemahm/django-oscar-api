@@ -157,13 +157,35 @@ class BaseCategorySerializer(OscarHyperlinkedModelSerializer):
 
 
 class CategorySerializer(BaseCategorySerializer):
-    children = serializers.HyperlinkedIdentityField(
-        view_name="category-child-list",
-        # lookup_field="full_slug",
-        lookup_url_kwarg="breadcrumbs",
-    )
+    children = serializers.SerializerMethodField()
 
     products = serializers.SerializerMethodField()
+
+    def get_children(self, obj):
+        """
+        URL to fetch this category's direct children.
+
+        The child-list endpoint resolves a category by walking a breadcrumb path
+        of each level's ``slug`` (see oscarapi.utils.categories.find_from_full_slug),
+        so we build the path from this node's ancestors-and-self slugs. This fork
+        dropped ``Category.full_slug``, which is why the old HyperlinkedIdentityField
+        fell back to the pk and produced the category's own detail URL instead of
+        its child list. We also propagate the ``branch`` query param because
+        CategoryList requires it, so the returned URL is directly followable.
+        """
+        from rest_framework.reverse import reverse
+
+        breadcrumbs = "/".join(c.slug for c in obj.get_ancestors_and_self())
+        request = self.context.get("request")
+        url = reverse(
+            "category-child-list",
+            kwargs={"breadcrumbs": breadcrumbs},
+            request=request,
+        )
+        branch = request.query_params.get("branch") if request else None
+        if branch:
+            url = f"{url}?branch={branch}"
+        return url
 
     def get_products(self, obj):
         products = getattr(obj, "filtered_products", [])
