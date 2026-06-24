@@ -163,6 +163,8 @@ class AbstractLineSerializer(serializers.ModelSerializer):
     )
     service_id = serializers.IntegerField(source="service.id", read_only=True, default=None, allow_null=True)
     service_start_at = serializers.DateTimeField(read_only=True, default=None, allow_null=True)
+    is_available = serializers.SerializerMethodField()
+    available_stock = serializers.SerializerMethodField()
 
     class Meta:
         model = Line
@@ -174,7 +176,43 @@ class AbstractLineSerializer(serializers.ModelSerializer):
             'note',
             'service_id',
             'service_start_at',
+            'is_available',
+            'available_stock',
         ]
+
+    def _stock_state(self, line):
+        """Return ``(is_available, available_stock)`` for a basket line.
+
+        ``available_stock`` is the net stock remaining (``num_in_stock`` minus
+        allocations), or ``None`` for products that don't track stock (e.g.
+        services -- effectively unlimited). ``is_available`` is ``True`` only
+        when the line is fully fulfillable for its current quantity, so the app
+        can flag exactly the lines that would block checkout. The app can tell
+        "out of stock" (available_stock == 0) from "only N left"
+        (0 < available_stock < quantity) using ``available_stock``.
+        """
+        product = getattr(line, "product", None)
+        try:
+            tracks_stock = product.get_product_class().track_stock
+        except Exception:
+            tracks_stock = True
+        if not tracks_stock:
+            return True, None
+        stockrecord = getattr(line, "stockrecord", None)
+        if stockrecord is None:
+            return False, 0
+        net = max(stockrecord.net_stock_level or 0, 0)
+        return net >= line.quantity, net
+
+    @extend_schema_field(OpenApiTypes.BOOL)
+    def get_is_available(self, line) -> bool:
+        return self._stock_state(line)[0]
+
+    @extend_schema_field(OpenApiTypes.INT)
+    def get_available_stock(self, line):
+        return self._stock_state(line)[1]
+
+
 class ProductInBasketSerializer(serializers.Serializer):
     product_id = serializers.IntegerField()
     qty = serializers.IntegerField()
