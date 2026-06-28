@@ -64,6 +64,7 @@ BASKET_FIELDS = overridable(
         "vendor",
         "products_in_basket",
         "minimum_order_value",
+        "recommended_products",
     ),
 )
 BASKETLINE_FIELDS = overridable(

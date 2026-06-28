@@ -256,10 +256,35 @@ class BasketSerializer(serializers.HyperlinkedModelSerializer):
     vendor = serializers.SerializerMethodField()
     # Add the new field for product information
     products_in_basket = serializers.SerializerMethodField()
+    recommended_products = serializers.SerializerMethodField()
 
     class Meta:
         model = Basket
         fields = settings.BASKET_FIELDS
+
+    @extend_schema_field(OpenApiTypes.OBJECT)
+    def get_recommended_products(self, obj):
+        """Branch-scoped recommendations for this basket: the vendor-curated
+        ``recommended_products`` of the basket's items first, then top-up with
+        other in-stock products at the same branch (see
+        ``server.apps.catalogue.recommendations``)."""
+        from server.apps.catalogue.recommendations import get_basket_recommendations
+
+        products = get_basket_recommendations(obj)
+        return ProductSerializer(
+            products,
+            many=True,
+            context=self.context,
+            fields=(
+                "id",
+                "url",
+                "title",
+                "selling_price",
+                "original_price",
+                "price_currency",
+                "images",
+            ),
+        ).data
 
     @extend_schema_field(OpenApiTypes.OBJECT)
     @extend_schema_field(OpenApiTypes.OBJECT)
