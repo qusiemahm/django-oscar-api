@@ -70,8 +70,12 @@ class ProductList(generics.ListAPIView):
         category_id = self.request.query_params.get("category_id")
         if category_id:
             qs = qs.filter(categories__id=category_id)
-            
-        return qs
+
+        # In-stock products first (by category display order, then id);
+        # out-of-stock products are pushed to the end of the response.
+        from server.apps.catalogue.ordering import apply_branch_stock_ordering
+
+        return apply_branch_stock_ordering(qs, branch_id)
 
 
 class ProductDetail(generics.RetrieveAPIView):
