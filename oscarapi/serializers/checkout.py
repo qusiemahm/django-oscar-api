@@ -351,7 +351,7 @@ class CheckoutSerializer(serializers.Serializer, OrderPlacementMixin):
                         )
                         continue
                     booked_count = service_obj.get_booked_count_for_slot(
-                        line.service_start_at, exclude_basket=basket
+                        line.service_start_at
                     )
                     if booked_count + line.quantity > service_obj.max_services_per_slot:
                         service_messages.append(

@@ -12,6 +12,8 @@ from rest_framework.permissions import IsAuthenticated
 from django.db import transaction
 from django.utils import timezone
 from datetime import timedelta
+
+from server.apps.service.holds import lock_service_slots
 from oscar.apps.partner.strategy import Selector
 
 
@@ -174,23 +176,26 @@ class CheckoutView(views.APIView):
 
         c_ser = self.serializer_class(data=request.data, context={"request": request})
 
-        if c_ser.is_valid():
-            order = c_ser.save()
-            basket.freeze()
-            o_ser = self.order_serializer_class(order, context={"request": request})
+        with transaction.atomic():
+            # Lock this basket's service slots so a concurrent checkout for the
+            # same slot cannot both pass the capacity check (first-checkout-wins).
+            lock_service_slots(basket)
+            if c_ser.is_valid():
+                order = c_ser.save()
+                basket.freeze()
+            else:
+                return response.Response(c_ser.errors, status.HTTP_406_NOT_ACCEPTABLE)
 
-            resp = response.Response(o_ser.data)
-
-            oscarapi_post_checkout.send(
-                sender=self,
-                order=order,
-                user=request.user,
-                request=request,
-                response=resp,
-            )
-            return resp
-
-        return response.Response(c_ser.errors, status.HTTP_406_NOT_ACCEPTABLE)
+        o_ser = self.order_serializer_class(order, context={"request": request})
+        resp = response.Response(o_ser.data)
+        oscarapi_post_checkout.send(
+            sender=self,
+            order=order,
+            user=request.user,
+            request=request,
+            response=resp,
+        )
+        return resp
 
 
 class UserAddressList(generics.ListCreateAPIView):

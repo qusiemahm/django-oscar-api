@@ -157,38 +157,47 @@ class BaseCategorySerializer(OscarHyperlinkedModelSerializer):
 
 
 class CategorySerializer(BaseCategorySerializer):
-    children = serializers.SerializerMethodField()
+    """`api/categories/?branch=` returns each category's full detail with its
+    descendants nested recursively (the same detail shape, not a link) and all
+    of the category's products embedded under ``products``.
+    """
 
+    children = serializers.SerializerMethodField()
     products = serializers.SerializerMethodField()
 
     def get_children(self, obj):
         """
-        URL to fetch this category's direct children.
-
-        The child-list endpoint resolves a category by walking a breadcrumb path
-        of each level's ``slug`` (see oscarapi.utils.categories.find_from_full_slug),
-        so we build the path from this node's ancestors-and-self slugs. This fork
-        dropped ``Category.full_slug``, which is why the old HyperlinkedIdentityField
-        fell back to the pk and produced the category's own detail URL instead of
-        its child list. We also propagate the ``branch`` query param because
-        CategoryList requires it, so the returned URL is directly followable.
+        Recursively serialize this category's direct children with the same
+        serializer, so the response is the full subtree of category details
+        rather than a link to a child-list endpoint.
         """
-        from rest_framework.reverse import reverse
-
-        breadcrumbs = "/".join(c.slug for c in obj.get_ancestors_and_self())
-        request = self.context.get("request")
-        url = reverse(
-            "category-child-list",
-            kwargs={"breadcrumbs": breadcrumbs},
-            request=request,
+        children = obj.get_children().filter(vendor_id=obj.vendor_id).order_by(
+            "order", "id"
         )
-        branch = request.query_params.get("branch") if request else None
-        if branch:
-            url = f"{url}?branch={branch}"
-        return url
+        return CategorySerializer(children, many=True, context=self.context).data
 
     def get_products(self, obj):
-        products = getattr(obj, "filtered_products", [])
+        """
+        Every public product directly in this category, with no paging or
+        pruning. When the request is branch-scoped (``?branch=``, which
+        CategoryList requires) only products sold at that active branch are
+        returned, in-stock first -- the same contract as ProductList. Products
+        of subcategories appear under their own entry in ``children``.
+        """
+        from server.apps.catalogue.ordering import apply_branch_stock_ordering
+
+        products = obj.product_set.filter(is_public=True)
+        request = self.context.get("request")
+        branch_id = request.query_params.get("branch") if request else None
+        if branch_id:
+            products = apply_branch_stock_ordering(
+                products.filter(
+                    branches__id=branch_id, branches__is_active=True
+                ).distinct(),
+                branch_id,
+            )
+        else:
+            products = products.distinct().order_by("id")
         return ProductSerializer(products, many=True, context=self.context).data
 
 
@@ -676,9 +685,14 @@ class ProductSerializer(PublicProductSerializer):
                 basket = operations.get_basket(self.context["request"])
                 branch_id = basket.branch
 
-            # Step 3: If still not available, fall back to the user's vendor staff branch ID
+            # Step 3: If still not available, fall back to the user's vendor staff branch ID.
+            # A vendor's auto-created super_admin staff row has branch=None, so guard it.
             if not branch_id and hasattr(self.context["request"].user, 'user_vendor_staff'):
-                branch_id = self.context["request"].user.user_vendor_staff.branch.id
+                staff_branch = getattr(
+                    self.context["request"].user.user_vendor_staff, "branch", None
+                )
+                if staff_branch is not None:
+                    branch_id = staff_branch.id
 
             # Step 4: Attempt to fetch the stock record for the determined branch_id
             try:

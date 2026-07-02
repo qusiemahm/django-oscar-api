@@ -2,10 +2,8 @@
 from rest_framework import generics
 from rest_framework.response import Response
 from django.db.models import Q
-from django.db.models import F
 
 from oscar.core.loading import get_class, get_model
-from collections import defaultdict
 
 from oscarapi.utils.categories import find_from_full_slug
 from oscarapi.utils.loading import get_api_classes, get_api_class
@@ -159,50 +157,26 @@ class CategoryList(generics.ListAPIView):
         except AttributeError:
             raise ValidationError({"branch": "This store has no associated vendor."})
 
+        # Return this level of the tree for the branch's vendor. Descendants are
+        # nested recursively by CategorySerializer, so we only return the top of
+        # the requested subtree here (root nodes, or the breadcrumb's children).
+        # All categories are shown -- no pruning to only those with in-stock
+        # products -- and each category embeds all of its products for this
+        # branch (CategorySerializer.get_products).
         queryset = (
             find_from_full_slug(breadcrumb_path, "/").get_children()
             if breadcrumb_path else
             Category.get_root_nodes()
         ).filter(vendor=vendor).distinct()
 
-        # Prefetch all public, in-stock products related to these categories
-        products = (
-            Product.objects
-            .filter(
-                is_public=True,
-                stockrecords__branch_id=branch_id,
-                stockrecords__num_in_stock__gt=F("stockrecords__num_allocated"),
-                categories__in=queryset,
-            )
-            .select_related()
-            .distinct()
-        )
-
+        # Search filters on the category itself (name/description), not products.
         if search_query:
-            products = products.filter(
-                Q(title__icontains=search_query) |
+            queryset = queryset.filter(
+                Q(name__icontains=search_query) |
                 Q(description__icontains=search_query)
             )
-        
-        # ── map products → category id ─────────────────────────────────────────
-        cat_products = defaultdict(list)
-        for product in products:
-            for cat in product.categories.all():
-                cat_products[cat.id].append(product)
 
-        # ── keep ONLY the categories that actually have products ───────────────
-        ids_with_products = [cid for cid, prods in cat_products.items() if prods]
-
-        if not ids_with_products:
-            return queryset.none()      # nothing to show
-
-        queryset = queryset.filter(id__in=ids_with_products)
-
-        # attach the pre‑filtered products to each remaining category
-        for cat in queryset:
-            cat.filtered_products = cat_products.get(cat.id, [])
-
-        return queryset
+        return queryset.order_by("order", "id")
 
 
 class CategoryDetail(generics.RetrieveAPIView):

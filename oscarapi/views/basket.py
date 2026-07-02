@@ -234,23 +234,24 @@ class AddProductView(APIView):
                     'value': f"ID:{value.id}"  # Store as "ID:27" instead of "مارشميلو"
                 }
 
-            # Add the product to the basket with transformed options
-            line, created = basket.add_product(product, quantity=quantity, options=transformed_options)
+            service_id = p_ser.validated_data.get("service_id")
+            service_start_at = p_ser.validated_data.get("service_start_at")
+
+            # Add the product to the basket with transformed options. The chosen
+            # service slot is passed in so each slot lands on its own line (and
+            # the same slot merges) instead of being overwritten afterwards.
+            line, created = basket.add_product(
+                product,
+                quantity=quantity,
+                options=transformed_options,
+                service_id=service_id,
+                service_start_at=service_start_at,
+            )
 
             if note:
                 try:
                     line.note = note
                     line.save()
-                except Exception:
-                    pass
-
-            service_id = p_ser.validated_data.get("service_id")
-            service_start_at = p_ser.validated_data.get("service_start_at")
-            if service_id and service_start_at:
-                try:
-                    line.service_id = service_id
-                    line.service_start_at = service_start_at
-                    line.save(update_fields=["service_id", "service_start_at"])
                 except Exception:
                     pass
 
@@ -575,8 +576,8 @@ class BasketLineDetail(generics.RetrieveUpdateDestroyAPIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
             # Honour the same notice-period and capacity rules as add-to-basket
-            # and checkout. Exclude this basket so the line's own existing
-            # booking doesn't count against the slot.
+            # and checkout. Basket lines no longer count toward capacity (only
+            # live order holds do), so no basket exclusion is needed.
             try:
                 service_obj.validate_booking(new_start_at)
             except ValueError as exc:
@@ -584,9 +585,7 @@ class BasketLineDetail(generics.RetrieveUpdateDestroyAPIView):
                     {"service_start_at": str(exc)},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
-            booked_count = service_obj.get_booked_count_for_slot(
-                new_start_at, exclude_basket=basket
-            )
+            booked_count = service_obj.get_booked_count_for_slot(new_start_at)
             if booked_count + new_quantity > service_obj.max_services_per_slot:
                 return Response(
                     {"service_start_at": _(
