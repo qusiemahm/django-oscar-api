@@ -1,4 +1,6 @@
 # pylint: disable=W0632
+import re
+
 from django.utils.translation import gettext_lazy as _
 from oscarapi.permissions import IsOwner
 
@@ -237,16 +239,34 @@ class AddProductView(APIView):
             service_id = p_ser.validated_data.get("service_id")
             service_start_at = p_ser.validated_data.get("service_start_at")
 
+            # One basket line is one booking: re-adding the same service slot
+            # is rejected, never merged into quantity 2. (Checked after the
+            # branch-mismatch flush so a cleared cart can't false-positive.)
+            if service_start_at is not None and basket.id and basket.lines.filter(
+                service_id=service_id, service_start_at=service_start_at
+            ).exists():
+                return Response(
+                    {"reason": _(
+                        "This time slot is already in your basket."
+                    )},
+                    status=status.HTTP_406_NOT_ACCEPTABLE,
+                )
+
             # Add the product to the basket with transformed options. The chosen
-            # service slot is passed in so each slot lands on its own line (and
-            # the same slot merges) instead of being overwritten afterwards.
-            line, created = basket.add_product(
-                product,
-                quantity=quantity,
-                options=transformed_options,
-                service_id=service_id,
-                service_start_at=service_start_at,
-            )
+            # service slot is passed in so each slot lands on its own line
+            # instead of being overwritten afterwards.
+            try:
+                line, created = basket.add_product(
+                    product,
+                    quantity=quantity,
+                    options=transformed_options,
+                    service_id=service_id,
+                    service_start_at=service_start_at,
+                )
+            except ValueError as exc:
+                return Response(
+                    {"reason": str(exc)}, status=status.HTTP_406_NOT_ACCEPTABLE
+                )
 
             if note:
                 try:
@@ -527,6 +547,17 @@ class BasketLineDetail(generics.RetrieveUpdateDestroyAPIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # One basket line is one booking: a service line is always quantity 1,
+        # matching the add-to-basket rule.
+        if instance.service_id and new_quantity != 1:
+            return Response(
+                {"quantity": _(
+                    "A service booking must have quantity 1. "
+                    "Book another time slot for an additional service."
+                )},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         # Perform stock validation
         basket = instance.basket
         product = instance.product
@@ -593,6 +624,25 @@ class BasketLineDetail(generics.RetrieveUpdateDestroyAPIView):
                     )},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
+            # One basket line is one booking: refuse to reschedule onto a slot
+            # another line in this basket already holds.
+            if basket.lines.filter(
+                service_id=instance.service_id, service_start_at=new_start_at
+            ).exclude(pk=instance.pk).exists():
+                return Response(
+                    {"service_start_at": _(
+                        "This time slot is already in your basket."
+                    )},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            # Re-fold the new slot into the line reference so a later add of
+            # the freed slot doesn't collide with this moved line.
+            from server.apps.basket.models import service_slot_line_reference
+
+            base_ref = re.sub(r"_s\d+$", "", str(instance.line_reference))
+            instance.line_reference = service_slot_line_reference(
+                base_ref, instance.service_id, new_start_at
+            )
             instance.service_start_at = new_start_at
 
         # Save the updated instance
